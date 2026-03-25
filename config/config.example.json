@@ -1,0 +1,25 @@
+{
+  "prefix": "!",
+  "db_path": "db/victor.db",
+  "roles": {
+    "owner": ["@\u265b \uFF28\uFF22\uFF29\uFF23 \u265b"],
+    "admin": ["Victor Admin"],
+    "verifier": ["Verifier"],
+    "verified_unlock": ["Buyer", "Seller", "Blackmarket"],
+    "blackmarket": ["Blackmarket"],
+    "seller": ["Seller"],
+    "buyer": ["Buyer"]
+  },
+  "required_tags": ["#highrise", "#verified"],
+  "required_regex": [],
+  "forbidden_regex": [],
+  "require_username_in_bio": true,
+  "min_bio_length": 20,
+  "max_bio_length": 500,
+  "auto_restart_on_changes": true,
+  "watch_poll_interval": 1.0,
+  "log_channel_id": null,
+  "highrise_api_base_url": "https://webapi.highrise.game",
+  "highrise_api_key": null,
+  "verification_max_failures": 2
+}
