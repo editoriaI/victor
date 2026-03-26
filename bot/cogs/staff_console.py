@@ -60,8 +60,8 @@ def build_staff_attention_embed(
     code: Optional[str] = None,
 ) -> discord.Embed:
     embed = discord.Embed(description=description, color=color)
-    embed.set_author(name="@victor.intern opened a staff thread")
-    embed.set_footer(text="victor.social // staff desk")
+    embed.set_author(name="🕸️ @victor.intern opened a staff thread")
+    embed.set_footer(text="v i c t o r . s o c i a l // staff desk")
 
     if code:
         embed.add_field(name="Code", value=code, inline=True)
@@ -94,8 +94,8 @@ def infer_command_fix(command_name: str, details: Optional[str]) -> Tuple[str, O
         )
     if "expected view parameter to be of type view not nonetype" in lowered:
         return (
-            "Victor tried to send a follow-up with an empty component payload. Retry after the current deploy; if it lingers, restart him.",
-            "restart",
+            "Victor tried to send a follow-up with an empty component payload. Retry after the current deploy, then resync commands once if Discord still looks out of date.",
+            "sync",
         )
     if "highrise web api returned 404" in lowered or "highrise web api denied" in lowered:
         return (
@@ -104,17 +104,17 @@ def infer_command_fix(command_name: str, details: Optional[str]) -> Tuple[str, O
         )
     if "gateway.discord.gg" in lowered or "clientconnectordnserror" in lowered:
         return (
-            "Discord was unreachable for a moment. Give it a beat, then restart Victor if he stays quiet.",
-            "restart",
+            "Discord was unreachable for a moment. Give it a beat, then resync commands once if the slash tree still feels stale.",
+            "sync",
         )
     if command_name in {"sync"}:
         return (
-            "Try resyncing again once. If Discord still disagrees, restart Victor so the tree reloads cleanly.",
+            "Try resyncing again once. If Discord still disagrees after that, keep the crash thread for the rebuild pass.",
             "sync",
         )
     return (
-        "Check the receipts, retry once, and use Apply Fix if Victor can safely handle the cleanup himself.",
-        "restart",
+        "Check the receipts, retry once, and use Apply Fix only when a resync is actually safe for this failure.",
+        None,
     )
 
 
@@ -125,6 +125,7 @@ class CommandAttentionView(discord.ui.View):
     @discord.ui.button(
         label="Quick Fix",
         style=discord.ButtonStyle.secondary,
+        emoji="💿",
         custom_id=f"{COMMAND_ACTION_VIEW_ID}:quick_fix",
     )
     async def quick_fix_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -138,6 +139,7 @@ class CommandAttentionView(discord.ui.View):
     @discord.ui.button(
         label="Apply Fix",
         style=discord.ButtonStyle.danger,
+        emoji="📟",
         custom_id=f"{COMMAND_ACTION_VIEW_ID}:apply_fix",
     )
     async def apply_fix_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -158,11 +160,14 @@ class CommandAttentionView(discord.ui.View):
         if admin_cog is None:
             await interaction.response.send_message("Victor misplaced his admin desk.", ephemeral=True)
             return
-        if action == "restart":
-            await admin_cog.handle_console_restart_button(interaction)
-            return
         if action == "sync":
             await admin_cog.handle_console_sync_button(interaction)
+            return
+        if action == "restart":
+            await interaction.response.send_message(
+                "Restart is disabled right now. We are in sync-only mode while the command set gets rebuilt.",
+                ephemeral=True,
+            )
             return
         await interaction.response.send_message(
             f"Victor does not know how to auto-apply `{action}` yet.",
@@ -177,6 +182,7 @@ class VerifyReviewView(discord.ui.View):
     @discord.ui.button(
         label="Manual Verify",
         style=discord.ButtonStyle.success,
+        emoji="🕯️",
         custom_id=f"{VERIFY_REVIEW_VIEW_ID}:manual",
     )
     async def manual_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -189,6 +195,7 @@ class VerifyReviewView(discord.ui.View):
     @discord.ui.button(
         label="View Status",
         style=discord.ButtonStyle.secondary,
+        emoji="🖤",
         custom_id=f"{VERIFY_REVIEW_VIEW_ID}:status",
     )
     async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

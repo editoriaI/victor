@@ -569,7 +569,7 @@ class VerifyCog(commands.Cog):
             return
 
         embed = await self._issue_verify_flow(str(ctx.author.id), member, highrise_username)
-        view = self._build_verify_view() if embed.title == "VICTOR // VERIFY" and any(field.name == "[CODE]" for field in embed.fields) else None
+        view = self._build_verify_view() if embed.title == embeds.TITLE_VERIFY and any(field.name == "[CODE]" for field in embed.fields) else None
         await ctx.send(embed=embed, view=view)
 
     @commands.command(name="manualverify")
@@ -649,7 +649,7 @@ class VerifyCog(commands.Cog):
 
         await interaction.response.defer(ephemeral=False, thinking=True)
         embed = await self._issue_verify_flow(str(author.id), member, highrise_username)
-        view = self._build_verify_view() if embed.title == "VICTOR // VERIFY" and any(field.name == "[CODE]" for field in embed.fields) else None
+        view = self._build_verify_view() if embed.title == embeds.TITLE_VERIFY and any(field.name == "[CODE]" for field in embed.fields) else None
         await self._send_interaction_embed(interaction, embed, ephemeral=False, view=view)
 
     @app_commands.command(name="manualverify", description="Manually approve a member after failed Highrise checks.")

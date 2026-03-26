@@ -20,10 +20,10 @@ SURFACE_LABELS = {
 }
 
 STATUS_HANDLES = {
-    "success": "@victor.intern posted",
-    "fail": "@victor.intern posted a crash-thread",
-    "warn": "@victor.intern posted a side-eye update",
-    "system": "@victor.intern updated his feed",
+    "success": "🖤 @victor.intern posted",
+    "fail": "🕸️ @victor.intern posted a crash-thread",
+    "warn": "📟 @victor.intern posted a side-eye update",
+    "system": "💿 @victor.intern updated his feed",
 }
 
 SYSTEM_CODES = {
@@ -158,7 +158,7 @@ def _build_feed_embed(
         timestamp=datetime.now(timezone.utc),
     )
     embed.set_author(name=STATUS_HANDLES.get(status, STATUS_HANDLES["system"]))
-    embed.set_footer(text="victor.social // live from the underworld desk")
+    embed.set_footer(text="v i c t o r . s o c i a l // live from the underworld desk")
 
     embed.add_field(
         name="Code",

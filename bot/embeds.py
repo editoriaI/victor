@@ -7,6 +7,16 @@ COLOR_WARN = 0x8A8A8A
 COLOR_ERR = 0x3A3A3A
 COLOR_NEUTRAL = 0x2B2B2B
 
+AUTHOR_TAG = "v i c t o r . e x e // away message"
+FOOTER_TAG = "c d - r"
+TITLE_VERIFY = "🕯️ VICTOR // VERIFY"
+TITLE_STATUS = "🖤 VICTOR // STATUS"
+TITLE_BLACKMARKET = "💿 VICTOR // BLACKMARKET"
+TITLE_REQUEST = "☎️ VICTOR // REQUEST"
+TITLE_MATCH = "⛓️ VICTOR // MATCH"
+TITLE_HELP = "🦇 VICTOR // HELP"
+TITLE_ADMIN = "📟 VICTOR // ADMIN"
+
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -14,12 +24,13 @@ def _timestamp() -> str:
 
 def make_embed(title: str, description: str, color: int) -> discord.Embed:
     embed = discord.Embed(title=title, description=description, color=color)
-    embed.set_footer(text=f"SYS.LOG | {_timestamp()}")
+    embed.set_author(name=AUTHOR_TAG)
+    embed.set_footer(text=f"{FOOTER_TAG} // {_timestamp()}")
     return embed
 
 
 def urgent_embed(code: str, description: str) -> discord.Embed:
-    return make_embed(f"VICTOR // URGENT // {code}", description, COLOR_ERR)
+    return make_embed(f"🕸️ VICTOR // URGENT // {code}", description, COLOR_ERR)
 
 
 def _format_verify_issue(label: str) -> str:
@@ -75,7 +86,7 @@ def verify_success_embed(
     manual: bool = False,
 ) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // VERIFY",
+        TITLE_VERIFY,
         "Verification complete. You survived the ritual. Barely.",
         COLOR_OK,
     )
@@ -94,7 +105,7 @@ def verify_success_embed(
 
 def verify_code_embed(user_mention: str, highrise_username: str, code: str) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // VERIFY",
+        TITLE_VERIFY,
         "Code issued. Tell them to place it in their Highrise bio exactly as written.",
         COLOR_OK,
     )
@@ -111,7 +122,7 @@ def verify_code_embed(user_mention: str, highrise_username: str, code: str) -> d
 
 def verify_fail_embed(user_mention: str, highrise_username: str, missing_labels: List[str]) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // VERIFY",
+        TITLE_VERIFY,
         "Verification failed. Tragic. Here is exactly what you need to fix.",
         COLOR_ERR,
     )
@@ -132,7 +143,7 @@ def verify_retry_embed(
     max_failures: int,
 ) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // VERIFY",
+        TITLE_VERIFY,
         "I checked the Highrise bio again. Your code is still not there.",
         COLOR_WARN,
     )
@@ -167,7 +178,7 @@ def verify_manual_review_embed(
 
 def manual_verify_ready_embed(user_mention: str, highrise_username: str) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // VERIFY",
+        TITLE_VERIFY,
         "Manual review approved. I signed the paperwork with visible disdain.",
         COLOR_OK,
     )
@@ -198,7 +209,7 @@ def status_embed(
     fail_count: Optional[int] = None,
 ) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // STATUS",
+        TITLE_STATUS,
         "Here is what you are to me.",
         COLOR_NEUTRAL,
     )
@@ -247,7 +258,7 @@ def blacklisted_embed(reason: Optional[str]) -> discord.Embed:
 
 def listing_created_embed(listing_id: int, item_name: str, price: int) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // BLACKMARKET",
+        TITLE_BLACKMARKET,
         "Listing posted. Price it like you mean it.",
         COLOR_OK,
     )
@@ -259,7 +270,7 @@ def listing_created_embed(listing_id: int, item_name: str, price: int) -> discor
 
 def listing_removed_embed(listing_id: int) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // BLACKMARKET",
+        TITLE_BLACKMARKET,
         "Listing pulled. Consider this a mercy.",
         COLOR_WARN,
     )
@@ -269,7 +280,7 @@ def listing_removed_embed(listing_id: int) -> discord.Embed:
 
 def listings_embed(listings: list) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // BLACKMARKET",
+        TITLE_BLACKMARKET,
         "Open listings. Do not waste my time.",
         COLOR_NEUTRAL,
     )
@@ -285,7 +296,7 @@ def listings_embed(listings: list) -> discord.Embed:
 
 def request_created_embed(request_id: int, item_name: str, max_price: int) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // REQUEST",
+        TITLE_REQUEST,
         "Request logged. Try not to embarrass yourself.",
         COLOR_OK,
     )
@@ -297,7 +308,7 @@ def request_created_embed(request_id: int, item_name: str, max_price: int) -> di
 
 def request_cancelled_embed(request_id: int) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // REQUEST",
+        TITLE_REQUEST,
         "Request cancelled. I closed the file.",
         COLOR_WARN,
     )
@@ -307,7 +318,7 @@ def request_cancelled_embed(request_id: int) -> discord.Embed:
 
 def no_sellers_embed(item_name: str) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // MATCH",
+        TITLE_MATCH,
         "No sellers. You are alone right now.",
         COLOR_WARN,
     )
@@ -317,7 +328,7 @@ def no_sellers_embed(item_name: str) -> discord.Embed:
 
 def match_alert_embed(match_id: int, item_name: str, max_price: int) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // MATCH",
+        TITLE_MATCH,
         "You have a buyer. Try to look alive.",
         COLOR_WARN,
     )
@@ -330,7 +341,7 @@ def match_alert_embed(match_id: int, item_name: str, max_price: int) -> discord.
 
 def match_accepted_embed(match_id: int) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // MATCH",
+        TITLE_MATCH,
         "Accepted. Do not embarrass me.",
         COLOR_OK,
     )
@@ -340,7 +351,7 @@ def match_accepted_embed(match_id: int) -> discord.Embed:
 
 def match_declined_embed(match_id: int) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // MATCH",
+        TITLE_MATCH,
         "Declined. That was inevitable.",
         COLOR_WARN,
     )
@@ -350,7 +361,7 @@ def match_declined_embed(match_id: int) -> discord.Embed:
 
 def help_embed() -> discord.Embed:
     embed = make_embed(
-        "VICTOR // HELP",
+        TITLE_HELP,
         "Pick a path from the menu. Do not get sentimental.",
         COLOR_NEUTRAL,
     )
@@ -374,7 +385,7 @@ def help_embed() -> discord.Embed:
 
 def blacklist_added_embed(user_mention: str) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // ADMIN",
+        TITLE_ADMIN,
         "Blacklist updated. Do not test me.",
         COLOR_WARN,
     )
@@ -385,7 +396,7 @@ def blacklist_added_embed(user_mention: str) -> discord.Embed:
 
 def blacklist_removed_embed(user_mention: str) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // ADMIN",
+        TITLE_ADMIN,
         "Blacklist removed. Do not get comfortable.",
         COLOR_NEUTRAL,
     )
@@ -396,7 +407,7 @@ def blacklist_removed_embed(user_mention: str) -> discord.Embed:
 
 def blacklist_list_embed(entries: list) -> discord.Embed:
     embed = make_embed(
-        "VICTOR // ADMIN",
+        TITLE_ADMIN,
         "Current blacklist.",
         COLOR_NEUTRAL,
     )

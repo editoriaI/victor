@@ -105,6 +105,9 @@ def _is_process_running(pid: int) -> bool:
         return False
     except PermissionError:
         return True
+    except OSError:
+        # Windows can raise a generic OSError for stale or invalid PIDs.
+        return False
     return True
 
 
@@ -304,13 +307,10 @@ def create_bot(cfg) -> commands.Bot:
 
     @bot.event
     async def setup_hook() -> None:
+        # Keep Victor in sync-only mode while the broader command set is rebuilt.
         await bot.load_extension("bot.cogs.staff_console")
         await bot.load_extension("bot.cogs.monitor")
-        await bot.load_extension("bot.cogs.verify")
-        await bot.load_extension("bot.cogs.blackmarket")
-        await bot.load_extension("bot.cogs.matchmaking")
         await bot.load_extension("bot.cogs.admin")
-        await bot.load_extension("bot.cogs.help")
         synced = await bot.tree.sync()
         bot.victor_synced_count = len(synced)
         logging.info("Synced %s application commands", len(synced))

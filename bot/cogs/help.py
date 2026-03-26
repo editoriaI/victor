@@ -8,10 +8,10 @@ from bot import embeds
 from bot.config import Config
 
 HELP_OPTIONS = (
-    ("verify", "Verify", "Issue code challenges and check verification status"),
-    ("blackmarket", "Blackmarket", "Listings, prices, and seller access"),
-    ("matchmaking", "Matchmaking", "Buyer requests and seller responses"),
-    ("admin", "Admin", "Blacklist, sync, restart, and owner override"),
+    ("verify", "🕯️ Verify", "Issue code challenges and check verification status"),
+    ("blackmarket", "💿 Blackmarket", "Listings, prices, and seller access"),
+    ("matchmaking", "⛓️ Matchmaking", "Buyer requests and seller responses"),
+    ("admin", "📟 Admin", "Blacklist, sync, restart, and owner override"),
 )
 
 
@@ -44,7 +44,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
 
     if topic in {"verify", "status"}:
         embed = embeds.make_embed(
-            "VICTOR // HELP // VERIFY",
+            f"{embeds.TITLE_HELP} // VERIFY",
             "Issue a code, tell the user to place it in their Highrise bio, then have them confirm with the button.",
             embeds.COLOR_NEUTRAL,
         )
@@ -72,7 +72,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
 
     if topic == "blackmarket":
         embed = embeds.make_embed(
-            "VICTOR // HELP // BLACKMARKET",
+            f"{embeds.TITLE_HELP} // BLACKMARKET",
             "Listings, pricing, and seller access.",
             embeds.COLOR_NEUTRAL,
         )
@@ -95,7 +95,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
 
     if topic in {"matchmaking", "request"}:
         embed = embeds.make_embed(
-            "VICTOR // HELP // MATCH",
+            f"{embeds.TITLE_HELP} // MATCH",
             "Buyer requests and seller responses.",
             embeds.COLOR_NEUTRAL,
         )
@@ -118,7 +118,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
 
     if topic in {"admin", "blacklist"}:
         embed = embeds.make_embed(
-            "VICTOR // HELP // ADMIN",
+            f"{embeds.TITLE_HELP} // ADMIN",
             "Restricted moderation controls.",
             embeds.COLOR_NEUTRAL,
         )
@@ -170,7 +170,7 @@ class HelpTopicSelect(discord.ui.Select):
             for value, label, description in HELP_OPTIONS
         ]
         super().__init__(
-            placeholder="Choose a help topic",
+            placeholder="pick a thread to open",
             min_values=1,
             max_values=1,
             options=options,
@@ -191,19 +191,19 @@ class HelpView(discord.ui.View):
         embed = self.topic_builder(topic)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Verify", style=discord.ButtonStyle.secondary, emoji="🕯️")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "verify")
 
-    @discord.ui.button(label="Blackmarket", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Blackmarket", style=discord.ButtonStyle.secondary, emoji="💿")
     async def blackmarket_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "blackmarket")
 
-    @discord.ui.button(label="Matchmaking", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Matchmaking", style=discord.ButtonStyle.secondary, emoji="⛓️")
     async def match_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "matchmaking")
 
-    @discord.ui.button(label="Admin", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Admin", style=discord.ButtonStyle.secondary, emoji="📟")
     async def admin_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "admin")
 
