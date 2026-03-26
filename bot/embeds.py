@@ -78,6 +78,17 @@ def _verify_fix_tips(missing_labels: List[str], highrise_username: str) -> str:
     return "\n".join(f"- {tip}" for tip in tips[:4])
 
 
+def _verification_stage_summary(verified: str, state: Optional[str], fail_count: Optional[int]) -> str:
+    if verified == "YES":
+        return "linked cleanly. paperwork closed."
+    if verified == "REVIEW":
+        return "parked at the staff desk. human judgment required."
+    if verified == "PENDING":
+        attempts = f" after {fail_count} miss{'es' if fail_count != 1 else ''}" if fail_count else ""
+        return f"waiting on the bio update{attempts}."
+    return "no live ritual on file."
+
+
 def verify_success_embed(
     user_mention: str,
     highrise_username: str,
@@ -99,6 +110,7 @@ def verify_success_embed(
         notes.append("Nickname updated to the Highrise username.")
     if unlocked_roles:
         notes.append(f"Unlocked roles: {', '.join(unlocked_roles)}")
+    embed.add_field(name="[THREAD]", value="approved and closed. no more haunting required.", inline=False)
     embed.add_field(name="[NOTES]", value="\n".join(f"- {note}" for note in notes), inline=False)
     return embed
 
@@ -106,17 +118,27 @@ def verify_success_embed(
 def verify_code_embed(user_mention: str, highrise_username: str, code: str) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "Code issued. Tell them to place it in their Highrise bio exactly as written.",
+        "new verification thread opened. this is the part where they prove they are not improvising.",
         COLOR_OK,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
     embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
     embed.add_field(name="[CODE]", value=code, inline=True)
     embed.add_field(
-        name="[NEXT]",
-        value="Tell them to place this code anywhere in their Highrise bio, then press the `Confirm Bio Updated` button below so I can scrub the API for it.",
+        name="[THREAD]",
+        value="phase 01 of 03 // issue code -> update bio -> confirm the recheck",
         inline=False,
     )
+    embed.add_field(
+        name="[HOW TO CLEAR]",
+        value=(
+            f"1. put `{code}` somewhere in the Highrise bio\n"
+            f"2. keep `{highrise_username}` visible and spelled exactly right\n"
+            "3. press the confirm button below so victor can re-scan the profile"
+        ),
+        inline=False,
+    )
+    embed.add_field(name="[MOD NOTE]", value="staff only needs to touch this if it rolls into review.", inline=False)
     return embed
 
 
@@ -144,7 +166,7 @@ def verify_retry_embed(
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "I checked the Highrise bio again. Your code is still not there.",
+        "the recheck came back ugly. the code still is not in the bio.",
         COLOR_WARN,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -152,8 +174,16 @@ def verify_retry_embed(
     embed.add_field(name="[CODE]", value=code, inline=True)
     embed.add_field(name="[FAIL COUNT]", value=f"{fail_count}/{max_failures}", inline=True)
     embed.add_field(
+        name="[THREAD]",
+        value="phase 02 of 03 // still pending. the user needs to fix the bio before staff should step in.",
+        inline=False,
+    )
+    embed.add_field(
         name="[NEXT]",
-        value="Have them update the Highrise bio, then press the `Confirm Bio Updated` button again. If this fails one more time, staff can use manual verification.",
+        value=(
+            "have them update the Highrise bio and press the confirm button again.\n"
+            "if the next check misses too, this thread escalates to manual review."
+        ),
         inline=False,
     )
     return embed
@@ -164,13 +194,18 @@ def verify_manual_review_embed(
     highrise_username: str,
     fail_count: int,
 ) -> discord.Embed:
-    embed = urgent_embed("VERIFY REVIEW", "Second strike. This one needs staff eyes now.")
+    embed = urgent_embed("VERIFY REVIEW", "the ritual stalled out twice. this one belongs to staff now.")
     embed.add_field(name="[USER]", value=user_mention, inline=True)
     embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
     embed.add_field(name="[FAIL COUNT]", value=str(fail_count), inline=True)
     embed.add_field(
+        name="[THREAD]",
+        value="phase 03 of 03 // mod review required. check the profile, then either approve it or leave it parked.",
+        inline=False,
+    )
+    embed.add_field(
         name="[NEXT]",
-        value="Staff can use `!manualverify @user` or `/manualverify` if the member is legitimate.",
+        value="staff can use `!manualverify @user` or `/manualverify` if the member is legitimate.",
         inline=False,
     )
     return embed
@@ -185,18 +220,21 @@ def manual_verify_ready_embed(user_mention: str, highrise_username: str) -> disc
     embed.add_field(name="[USER]", value=user_mention, inline=True)
     embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
     embed.add_field(name="[RESULT]", value="MANUAL PASS", inline=True)
+    embed.add_field(name="[THREAD]", value="staff stamped it through. victor filed the resentment internally.", inline=False)
     return embed
 
 
 def highrise_user_not_found_embed(highrise_username: str) -> discord.Embed:
-    embed = urgent_embed("HIGHRISE", "That Highrise username does not exist. Try again with a real one.")
+    embed = urgent_embed("HIGHRISE", "that username did not resolve in the web api, so this thread dies here.")
     embed.add_field(name="[USERNAME]", value=highrise_username, inline=False)
+    embed.add_field(name="[NEXT]", value="check spelling, casing, and whether the account exists publicly.", inline=False)
     return embed
 
 
 def highrise_api_error_embed(message: str) -> discord.Embed:
-    embed = urgent_embed("HIGHRISE API", "Highrise did not cooperate. Try again in a moment.")
+    embed = urgent_embed("HIGHRISE API", "the api blinked first. this is a network or endpoint problem, not a user failure.")
     embed.add_field(name="[DETAILS]", value=message[:1024], inline=False)
+    embed.add_field(name="[NEXT]", value="retry in a moment. if it keeps happening, staff should check the endpoint path.", inline=False)
     return embed
 
 
@@ -210,7 +248,7 @@ def status_embed(
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_STATUS,
-        "Here is what you are to me.",
+        "status board pulled. here is the current state of the ritual.",
         COLOR_NEUTRAL,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -222,6 +260,11 @@ def status_embed(
         embed.add_field(name="[CODE]", value=code, inline=True)
     if fail_count is not None:
         embed.add_field(name="[FAIL COUNT]", value=str(fail_count), inline=True)
+    embed.add_field(
+        name="[THREAD]",
+        value=_verification_stage_summary(verified, state, fail_count),
+        inline=False,
+    )
     return embed
 
 

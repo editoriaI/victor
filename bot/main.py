@@ -307,9 +307,10 @@ def create_bot(cfg) -> commands.Bot:
 
     @bot.event
     async def setup_hook() -> None:
-        # Keep Victor in sync-only mode while the broader command set is rebuilt.
+        # Bring verify back online while the rest of the broader command set stays parked.
         await bot.load_extension("bot.cogs.staff_console")
         await bot.load_extension("bot.cogs.monitor")
+        await bot.load_extension("bot.cogs.verify")
         await bot.load_extension("bot.cogs.admin")
         synced = await bot.tree.sync()
         bot.victor_synced_count = len(synced)

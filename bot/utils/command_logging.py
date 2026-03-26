@@ -152,7 +152,13 @@ def _build_feed_embed(
         if status == "system"
         else _command_post_copy(status, surface, command_name)
     )
+    title = (
+        f"feed // {system_title or 'system update'}"
+        if status == "system"
+        else f"feed // {_command_label(surface, command_name)}"
+    )
     embed = discord.Embed(
+        title=title,
         description=description,
         color=STATUS_COLORS.get(status, STATUS_COLORS["system"]),
         timestamp=datetime.now(timezone.utc),
@@ -173,6 +179,13 @@ def _build_feed_embed(
 
     if system_title:
         embed.add_field(name="Mood", value=system_title, inline=False)
+    else:
+        state = {
+            "success": "cleared",
+            "warn": "watch it",
+            "fail": "mod look required",
+        }.get(status, "noted")
+        embed.add_field(name="State", value=state, inline=True)
 
     if user_id is not None:
         embed.add_field(name="Tagged", value=f"<@{user_id}>", inline=True)

@@ -23,8 +23,9 @@ class VerifyConfirmView(discord.ui.View):
         self.cog = cog
 
     @discord.ui.button(
-        label="Confirm Bio Updated",
+        label="Recheck Bio",
         style=discord.ButtonStyle.success,
+        emoji="🕯️",
         custom_id=VERIFY_CONFIRM_BUTTON_ID,
     )
     async def confirm_bio_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -404,6 +405,10 @@ class VerifyCog(commands.Cog):
                 member=member,
                 highrise_username=profile.username,
                 fail_count=fail_count,
+                code=code,
+                last_error="Verification code missing from Highrise bio.",
+                max_failures=self.cfg.verification_max_failures,
+                bio_preview=(profile.bio or "")[:220] if profile.bio else "EMPTY BIO",
             )
             return embeds.verify_manual_review_embed(member.mention, profile.username, fail_count), True
         return (
@@ -568,6 +573,7 @@ class VerifyCog(commands.Cog):
             await ctx.send(embed=embeds.blacklisted_embed(target_blacklist.get("reason")))
             return
 
+        await ctx.trigger_typing()
         embed = await self._issue_verify_flow(str(ctx.author.id), member, highrise_username)
         view = self._build_verify_view() if embed.title == embeds.TITLE_VERIFY and any(field.name == "[CODE]" for field in embed.fields) else None
         await ctx.send(embed=embed, view=view)

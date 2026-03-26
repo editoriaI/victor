@@ -55,11 +55,15 @@ def build_staff_attention_embed(
     location: Optional[str] = None,
     details: Optional[str] = None,
     highrise_username: Optional[str] = None,
+    stage: Optional[str] = None,
+    outcome: Optional[str] = None,
+    next_move: Optional[str] = None,
     quick_fix: Optional[str] = None,
     apply_fix: Optional[str] = None,
     code: Optional[str] = None,
+    bio_preview: Optional[str] = None,
 ) -> discord.Embed:
-    embed = discord.Embed(description=description, color=color)
+    embed = discord.Embed(title=title, description=description, color=color)
     embed.set_author(name="🕸️ @victor.intern opened a staff thread")
     embed.set_footer(text="v i c t o r . s o c i a l // staff desk")
 
@@ -74,8 +78,16 @@ def build_staff_attention_embed(
         embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
     if location:
         embed.add_field(name="Where", value=location, inline=True)
+    if stage:
+        embed.add_field(name="Stage", value=stage, inline=True)
+    if outcome:
+        embed.add_field(name="Status", value=outcome, inline=True)
     if details:
         embed.add_field(name="Receipts", value=details[:1024], inline=False)
+    if bio_preview:
+        embed.add_field(name="Bio Preview", value=bio_preview[:1024], inline=False)
+    if next_move:
+        embed.add_field(name="Desk Note", value=next_move[:1024], inline=False)
     if quick_fix:
         embed.add_field(name="Quick Fix", value=quick_fix[:1024], inline=False)
     if apply_fix:
@@ -180,7 +192,7 @@ class VerifyReviewView(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="Manual Verify",
+        label="Stamp Pass",
         style=discord.ButtonStyle.success,
         emoji="🕯️",
         custom_id=f"{VERIFY_REVIEW_VIEW_ID}:manual",
@@ -193,7 +205,7 @@ class VerifyReviewView(discord.ui.View):
         await verify_cog.handle_console_manual_verify_button(interaction)
 
     @discord.ui.button(
-        label="View Status",
+        label="Pull Status",
         style=discord.ButtonStyle.secondary,
         emoji="🖤",
         custom_id=f"{VERIFY_REVIEW_VIEW_ID}:status",
@@ -219,13 +231,16 @@ async def send_command_attention_post(
     location_value = "direct messages" if location == "dm" else (f"guild {location}" if location else None)
     command_label = f"/{command_name}" if surface == "slash" else f"!{command_name}"
     embed = build_staff_attention_embed(
-        "Command Attention",
+        "📟 Command Attention",
         f"`{command_label}` fell apart hard enough that staff should probably look alive.",
         code=_staff_code("Command failure", command_name=command_name),
         tagged_user_id=user_id,
         issue="Command failure",
         location=location_value,
+        stage="runtime alert",
+        outcome="needs staff eyes",
         details=details,
+        next_move="check receipts, decide whether this is a one-off wobble or a real blocker, then use the buttons if the fix is safe.",
         quick_fix=infer_command_fix(command_name, details)[0],
         apply_fix=infer_command_fix(command_name, details)[1],
     )
@@ -239,17 +254,28 @@ async def send_verify_review_post(
     member: discord.Member,
     highrise_username: str,
     fail_count: int,
+    code: str,
+    last_error: str,
+    max_failures: int,
+    bio_preview: str,
 ) -> None:
     embed = build_staff_attention_embed(
-        "Verify Review",
-        "verification hit the staff desk. the code still is not in the bio and i am done being patient.",
+        "🕯️ Verify Review",
+        "verification hit the staff desk. the user burned through the automated checks and this case now needs a mod call.",
         color=0xD4A017,
         code=_staff_code("Manual verification review"),
         tagged_user_id=member.id,
         highrise_username=highrise_username,
         issue="Manual verification review",
         location=f"guild {member.guild.id}",
-        details=f"fail_count={fail_count}",
+        stage="phase 03 of 03",
+        outcome=f"manual review after {fail_count}/{max_failures} misses",
+        details=f"verify_code={code} | fail_count={fail_count} | last_error={last_error}",
+        bio_preview=bio_preview,
+        next_move=(
+            "open the member status, compare the current Highrise bio against the issued code, "
+            "then manual verify only if the account looks legitimate."
+        ),
     )
     await send_log_channel(bot, cfg, embed=embed, view=VerifyReviewView())
 

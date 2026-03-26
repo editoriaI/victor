@@ -37,7 +37,7 @@ class AdminCog(commands.Cog):
         synced = await self.bot.tree.sync()
         embed = embeds.make_embed(
             embeds.TITLE_ADMIN,
-            "Slash commands resynced. That is the only ritual we are allowing right now.",
+            "Slash commands resynced. Verify is back on the board and the rest can wait their turn.",
             embeds.COLOR_OK,
         )
         embed.add_field(name="[SYNCED]", value=str(len(synced)), inline=True)
