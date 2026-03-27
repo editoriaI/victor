@@ -8,6 +8,7 @@ from bot.utils.command_logging import send_log_channel
 
 COMMAND_ACTION_VIEW_ID = "victor:console:command"
 VERIFY_REVIEW_VIEW_ID = "victor:console:verify_review"
+VERIFY_INTAKE_VIEW_ID = "victor:console:verify_intake"
 
 STAFF_COMMAND_CODES = {
     "verify": 9011,
@@ -40,6 +41,8 @@ def _field_value(embed: discord.Embed, name: str) -> Optional[str]:
 def _staff_code(issue: Optional[str], *, command_name: Optional[str] = None) -> int:
     if issue == "Manual verification review":
         return 9101
+    if issue == "Verify intake approval":
+        return 9102
     if issue == "Command failure":
         return STAFF_COMMAND_CODES.get((command_name or "").casefold(), STAFF_COMMAND_CODES["unknown"])
     return 9999
@@ -163,7 +166,7 @@ class CommandAttentionView(discord.ui.View):
         action = (_field_value(embed, "Apply Fix") or "").strip().casefold()
         if not action or action == "none":
             await interaction.response.send_message(
-                "No safe auto-fix is attached to this crash thread. Staff eyes only, unfortunately.",
+                "[ NO AUTO-FIX ]\n\nThere is no safe shortcut here.\n\nA real person needs to step in.\nUnfortunate, I know.",
                 ephemeral=True,
             )
             return
@@ -218,6 +221,50 @@ class VerifyReviewView(discord.ui.View):
         await verify_cog.handle_console_status_button(interaction)
 
 
+class VerifyIntakeReviewView(discord.ui.View):
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Accept Username",
+        style=discord.ButtonStyle.success,
+        emoji="🕯️",
+        custom_id=f"{VERIFY_INTAKE_VIEW_ID}:accept",
+    )
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        verify_cog = interaction.client.get_cog("VerifyCog")
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the intake file.", ephemeral=True)
+            return
+        await verify_cog.handle_console_accept_username_button(interaction)
+
+    @discord.ui.button(
+        label="Reject Username",
+        style=discord.ButtonStyle.danger,
+        emoji="📟",
+        custom_id=f"{VERIFY_INTAKE_VIEW_ID}:reject",
+    )
+    async def reject_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        verify_cog = interaction.client.get_cog("VerifyCog")
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the intake file.", ephemeral=True)
+            return
+        await verify_cog.handle_console_reject_username_button(interaction)
+
+    @discord.ui.button(
+        label="Pull Status",
+        style=discord.ButtonStyle.secondary,
+        emoji="🖤",
+        custom_id=f"{VERIFY_INTAKE_VIEW_ID}:status",
+    )
+    async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        verify_cog = interaction.client.get_cog("VerifyCog")
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the intake file.", ephemeral=True)
+            return
+        await verify_cog.handle_console_status_button(interaction)
+
+
 async def send_command_attention_post(
     bot: commands.Bot,
     cfg: Config,
@@ -232,7 +279,7 @@ async def send_command_attention_post(
     command_label = f"/{command_name}" if surface == "slash" else f"!{command_name}"
     embed = build_staff_attention_embed(
         "📟 Command Attention",
-        f"`{command_label}` fell apart hard enough that staff should probably look alive.",
+        "[ COMMAND FAILURE ]\n\nThat command collapsed mid-execution.\n\nStaff may want to investigate\nbefore it develops personality.",
         code=_staff_code("Command failure", command_name=command_name),
         tagged_user_id=user_id,
         issue="Command failure",
@@ -241,7 +288,10 @@ async def send_command_attention_post(
         outcome="needs staff eyes",
         details=details,
         next_move="check receipts, decide whether this is a one-off wobble or a real blocker, then use the buttons if the fix is safe.",
-        quick_fix=infer_command_fix(command_name, details)[0],
+        quick_fix=(
+            "[ QUICK FIX AVAILABLE ]\n\nHere's the fastest stable correction.\n\n"
+            f"{infer_command_fix(command_name, details)[0]}"
+        ),
         apply_fix=infer_command_fix(command_name, details)[1],
     )
     await send_log_channel(bot, cfg, embed=embed, view=CommandAttentionView())
@@ -280,6 +330,33 @@ async def send_verify_review_post(
     await send_log_channel(bot, cfg, embed=embed, view=VerifyReviewView())
 
 
+async def send_verify_intake_review_post(
+    bot: commands.Bot,
+    cfg: Config,
+    *,
+    member: discord.Member,
+    highrise_username: str,
+    submitted_by_id: int,
+    previous_username: Optional[str],
+) -> None:
+    embed = build_staff_attention_embed(
+        "📟 Verify Intake",
+        "[ STAFF ACTION REQUIRED ]\n\nNew Highrise intake just landed.\n\nApprove it or reject it before it gets filed.\nLetting it sit here helps no one. Especially me.",
+        color=0x5865F2,
+        code=_staff_code("Verify intake approval"),
+        tagged_user_id=member.id,
+        highrise_username=highrise_username,
+        issue="Verify intake approval",
+        location=f"guild {member.guild.id}",
+        stage="awaiting staff sign-off",
+        outcome="pending approval",
+        details=f"submitted_by={submitted_by_id} | previous_username={previous_username or 'NONE'}",
+        next_move="accept if the username looks right for this member. reject if it needs to be resubmitted cleanly.",
+    )
+    await send_log_channel(bot, cfg, embed=embed, view=VerifyIntakeReviewView())
+
+
 async def setup(bot: commands.Bot) -> None:
     bot.add_view(CommandAttentionView())
     bot.add_view(VerifyReviewView())
+    bot.add_view(VerifyIntakeReviewView())

@@ -90,7 +90,7 @@ def _write_patch_note_state(state: dict) -> None:
 def _build_patch_note_embed() -> discord.Embed:
     embed = discord.Embed(
         title="patch notes // verify intake refresh",
-        description="victor pushed a quieter, tighter verify pass so the server can collect Highrise usernames without the old bio ritual.",
+        description="[ PATCH LOG ]\n\nVictor has deployed a quieter, tighter verify flow.\n\nNo more bio ritual.\nJust usernames, intake, and staff judgment.\n\nCleaner system. Fewer excuses.",
         color=STATUS_COLORS["system"],
         timestamp=datetime.now(timezone.utc),
     )
@@ -99,9 +99,9 @@ def _build_patch_note_embed() -> discord.Embed:
     embed.add_field(
         name="What Changed",
         value=(
-            "- `verify` now opens a member intake prompt instead of checking the Highrise bio\n"
-            "- members submit their HR username directly in Victor's prompt\n"
-            "- Victor stores the username, updates nickname when possible, and keeps it on file"
+            "- `verify` now opens a member intake prompt\n"
+            "- members submit their HR username directly\n"
+            "- staff approves or rejects before anything gets filed"
         ),
         inline=False,
     )
@@ -112,7 +112,7 @@ def _build_patch_note_embed() -> discord.Embed:
     )
     embed.add_field(
         name="Status + Staff",
-        value="`status` reads the username on file, and staff still has manual verify for corrections or overrides.",
+        value="`status` shows pending, returned, or logged. staff still has manual verify for corrections or overrides.",
         inline=False,
     )
     embed.add_field(

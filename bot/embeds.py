@@ -79,6 +79,11 @@ def _verify_fix_tips(missing_labels: List[str], highrise_username: str) -> str:
 
 
 def _verification_stage_summary(verified: str, state: Optional[str], fail_count: Optional[int]) -> str:
+    if state == "STAFF REVIEW":
+        return "waiting at the staff desk for a yes or no."
+    if state == "RETRY REQUESTED":
+        attempts = f" after {fail_count} rejection{'s' if fail_count != 1 else ''}" if fail_count else ""
+        return f"staff kicked it back for another pass{attempts}."
     if verified == "YES":
         return "linked cleanly. paperwork closed."
     if verified == "REVIEW":
@@ -99,7 +104,7 @@ def verify_success_embed(
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "Verification complete. You survived the ritual. Barely.",
+        "[ VERIFICATION COMPLETE \u2714 ]\n\nSigned. Filed. Buried in the system.\n\nYour username is now on record.\nDo not make me reopen this file.",
         COLOR_OK,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -116,15 +121,73 @@ def verify_success_embed(
         notes.append("Nickname updated to the Highrise username.")
     if unlocked_roles:
         notes.append(f"Unlocked roles: {', '.join(unlocked_roles)}")
-    embed.add_field(name="[THREAD]", value="approved and closed. no more haunting required.", inline=False)
+    embed.add_field(name="[THREAD]", value="thread closed. system remains stable. barely.", inline=False)
     embed.add_field(name="[NOTES]", value="\n".join(f"- {note}" for note in notes), inline=False)
+    return embed
+
+
+def verify_submission_received_embed(user_mention: str, highrise_username: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "[ INTAKE RECEIVED ]\n\nGood. It's on the desk now.\n\nStaff will decide if this belongs in the system\nor back in your drafts where it came from.\n\nTry patience. It builds character.",
+        COLOR_WARN,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
+    embed.add_field(name="[STATE]", value="AWAITING STAFF REVIEW", inline=True)
+    embed.add_field(
+        name="[THREAD]",
+        value="staff will confirm the username from the console post. once they approve it, victor closes the loop.",
+        inline=False,
+    )
+    return embed
+
+
+def verify_rejected_embed(user_mention: str, highrise_username: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "[ VERIFICATION REJECTED \u2716 ]\n\nStaff sent that back.\n\nEither it's wrong, messy, or you got creative\nwhen no one asked you to.\n\nSubmit it again. Correctly this time.",
+        COLOR_ERR,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
+    embed.add_field(name="[RESULT]", value="REJECTED", inline=True)
+    embed.add_field(
+        name="[NEXT]",
+        value="run `verify` again and resubmit the correct username. victor is capable of patience in very small doses.",
+        inline=False,
+    )
+    return embed
+
+
+def verify_staff_approved_embed(user_mention: str, highrise_username: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "[ INTAKE APPROVED \u2714 ]\n\nUsername cleared.\n\nFiled. Updated. Thread closed.\nSystem integrity preserved.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
+    embed.add_field(name="[RESULT]", value="APPROVED", inline=True)
+    return embed
+
+
+def verify_staff_rejected_embed(user_mention: str, highrise_username: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "[ INTAKE REJECTED \u2716 ]\n\nUsername denied.\n\nReturned to user for a cleaner submission.\nTry again when it looks like you meant it.",
+        COLOR_ERR,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
+    embed.add_field(name="[RESULT]", value="REJECTED", inline=True)
     return embed
 
 
 def verify_prompt_embed(user_mention: str, existing_username: Optional[str] = None) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "intake thread opened. victor only needs your Highrise username so the server record stays clean and readable.",
+        "[ INTAKE THREAD OPENED ]\n\nStay still.\n\nVictor only needs your Highrise username.\nKeep it clean. Keep it exact.\n\nThis record is permanent. I would prefer not to fix it later.",
         COLOR_NEUTRAL,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -132,7 +195,7 @@ def verify_prompt_embed(user_mention: str, existing_username: Optional[str] = No
     embed.add_field(name="[MODE]", value="member intake", inline=True)
     embed.add_field(
         name="[THREAD]",
-        value="click the button below, drop your HR username into the prompt, and victor will file it into your record.",
+        value="click the button below, drop your HR username into the prompt, and victor will hand it to staff for a clean sign-off.",
         inline=False,
     )
     if existing_username:
@@ -140,6 +203,52 @@ def verify_prompt_embed(user_mention: str, existing_username: Optional[str] = No
     embed.add_field(
         name="[WHY]",
         value="this keeps Discord-side verification readable without asking people to trade or prove anything off-platform.",
+        inline=False,
+    )
+    return embed
+
+
+def verify_channel_redirect_embed(channel_mention: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "[ VERIFY LIVES HERE ]\n\nVictor only handles Highrise intake inside the designated lane.\n\nHead to "
+        f"{channel_mention} and run it there so the whole paper trail stays in one place.",
+        COLOR_WARN,
+    )
+    embed.add_field(
+        name="[NEXT]",
+        value=f"open {channel_mention}, run `verify`, and follow the intake prompt.",
+        inline=False,
+    )
+    return embed
+
+
+def verify_join_embed(user_mention: str, verify_channel_mention: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "[ VERIFY ON JOIN ]\n\nWelcome in.\n\nBefore you get too comfortable, get your Highrise username on file.\nVictor would prefer not to guess who you are later.",
+        COLOR_WARN,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[CHANNEL]", value=verify_channel_mention, inline=True)
+    embed.add_field(name="[NEXT]", value=f"head to {verify_channel_mention} and run `/verify` or `!verify`.", inline=False)
+    return embed
+
+
+def verify_current_members_embed(verify_channel_mention: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "[ CURRENT MEMBERS CHECK-IN ]\n\nIf your Highrise username is not on file yet, now would be an excellent time to fix that.\n\nVictor is cleaning up the books.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(
+        name="[WHERE TO GO]",
+        value=f"use {verify_channel_mention} for `/verify`, `!verify`, `/status`, or `!status`.",
+        inline=False,
+    )
+    embed.add_field(
+        name="[HOW IT WORKS]",
+        value="submit your exact Highrise username, wait for staff approval, and let Victor close the file properly.",
         inline=False,
     )
     return embed
@@ -244,7 +353,7 @@ def verify_manual_review_embed(
 def manual_verify_ready_embed(user_mention: str, highrise_username: str) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "Manual review approved. I signed the paperwork with visible disdain.",
+        "[ MANUAL OVERRIDE ACCEPTED ]\n\nStaff stepped in.\n\nYour username has been forced through the system\nwith visible reluctance on my end.\n\nYou're set. Don't make it weird.",
         COLOR_OK,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -271,7 +380,7 @@ def highrise_api_error_embed(message: str) -> discord.Embed:
 def verify_missing_record_embed(user_mention: str) -> discord.Embed:
     embed = make_embed(
         TITLE_STATUS,
-        "there is no Highrise intake on file for this member yet.",
+        "[ STATUS: EMPTY ]\n\nThere is no intake on file for you.\n\nWhich means you've done nothing.\nFix that.",
         COLOR_WARN,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -287,9 +396,15 @@ def status_embed(
     code: Optional[str] = None,
     fail_count: Optional[int] = None,
 ) -> discord.Embed:
+    descriptions = {
+        "STAFF REVIEW": "[ STATUS: PENDING ]\n\nYour intake is sitting on the staff desk.\n\nWaiting. Judged. Unmoved.\n\nYou'll know when they care.",
+        "RETRY REQUESTED": "[ STATUS: RETURNED ]\n\nStaff bounced your username back.\n\nClean it up. Resubmit it.\nWe will attempt this again without the chaos.",
+        "USERNAME LOGGED": "[ STATUS: LOGGED \u2714 ]\n\nUsername is on file.\n\nThread closed. Paperwork survived.\nSystem remains stable. Barely.",
+        "NO DATA": "[ STATUS: EMPTY ]\n\nThere is no intake on file for you.\n\nWhich means you've done nothing.\nFix that.",
+    }
     embed = make_embed(
         TITLE_STATUS,
-        "status board pulled. here is the current state of the ritual.",
+        descriptions.get(state or "", "[ STATUS ]\n\nVictor found a file. It's readable enough."),
         COLOR_NEUTRAL,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -306,17 +421,19 @@ def status_embed(
         value=_verification_stage_summary(verified, state, fail_count),
         inline=False,
     )
+    if state == "RETRY REQUESTED":
+        embed.add_field(name="[NEXT]", value="submit `verify` again with the corrected Highrise username.", inline=False)
     return embed
 
 
 def permission_denied_embed(required_role: str) -> discord.Embed:
-    embed = urgent_embed("PERMISSION", "Cute. You do not have access.")
+    embed = urgent_embed("PERMISSION", "[ ACCESS DENIED ]\n\nThat lane is not yours.\n\nAnd no, asking again will not change that.")
     embed.add_field(name="[REQUIRED]", value=required_role, inline=False)
     return embed
 
 
 def invalid_usage_embed(usage: str) -> discord.Embed:
-    embed = urgent_embed("INVALID", "Wrong ritual. Try the documented one.")
+    embed = urgent_embed("INVALID", "[ INVALID INPUT ]\n\nThat was not the command.\n\nFollow the structure like everyone else\nor continue guessing. I'll be here either way.")
     embed.add_field(name="[USAGE]", value=usage, inline=False)
     return embed
 
@@ -328,15 +445,45 @@ def not_found_embed(query: str) -> discord.Embed:
 
 
 def system_error_embed() -> discord.Embed:
-    embed = urgent_embed("SYSTEM", "I blinked. Try again.")
+    embed = urgent_embed("SYSTEM", "[ SYSTEM INTERRUPTION ]\n\nSomething broke.\n\nEven I noticed.\n\nTry again.")
     embed.add_field(name="[ERROR]", value="DB_WRITE_FAIL", inline=False)
     return embed
 
 
 def blacklisted_embed(reason: Optional[str]) -> discord.Embed:
-    embed = urgent_embed("BLACKLIST", "You are not allowed to use this system.")
+    embed = urgent_embed("BLACKLIST", "[ ACCESS REVOKED ]\n\nYou are not permitted to use this system.\n\nThis is intentional.")
     if reason:
         embed.add_field(name="[REASON]", value=reason, inline=False)
+    return embed
+
+
+def sync_success_embed(synced_count: int) -> discord.Embed:
+    embed = make_embed(
+        TITLE_ADMIN,
+        "[ SYNC COMPLETE \u2714 ]\n\nSlash tree resynced.\n\nSystem aligned. I can breathe again.\nFiguratively.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[SYNCED]", value=str(synced_count), inline=True)
+    return embed
+
+
+def approval_dm_embed(highrise_username: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "Your Highrise username has been approved and logged.\n\nYou're clear.\n\nTry not to come back through this system again.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
+    return embed
+
+
+def rejection_dm_embed(highrise_username: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "Your username was not approved.\n\nRun verify again and submit the exact Highrise handle\nyou want permanently on file.\n\nPrecision matters more than confidence here.",
+        COLOR_ERR,
+    )
+    embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
     return embed
 
 

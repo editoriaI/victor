@@ -292,6 +292,37 @@ def create_bot(cfg) -> commands.Bot:
         await maybe_publish_patch_note(bot, cfg)
 
     @bot.event
+    async def on_member_join(member: discord.Member) -> None:
+        verify_channel_id = cfg.verify_channel_id
+        if not verify_channel_id:
+            return
+
+        verify_channel_mention = f"<#{verify_channel_id}>"
+        embed = embeds.verify_join_embed(member.mention, verify_channel_mention)
+
+        try:
+            await member.send(embed=embed)
+        except discord.HTTPException:
+            logging.getLogger("victor.verify").info("Could not DM verify onboarding to %s", member.id)
+
+        welcome_channel_id = cfg.welcome_channel_id
+        if not welcome_channel_id:
+            return
+
+        channel = bot.get_channel(welcome_channel_id)
+        if channel is None:
+            try:
+                channel = await bot.fetch_channel(welcome_channel_id)
+            except (discord.HTTPException, discord.Forbidden, discord.NotFound):
+                return
+
+        if isinstance(channel, discord.TextChannel):
+            try:
+                await channel.send(content=member.mention, embed=embed)
+            except (discord.HTTPException, discord.Forbidden):
+                return
+
+    @bot.event
     async def on_app_command_completion(
         interaction: discord.Interaction, command: discord.app_commands.Command
     ) -> None:

@@ -2,15 +2,34 @@
   "prefix": "!",
   "db_path": "db/victor.db",
   "roles": {
-    "owner": ["@\u265b \uFF28\uFF22\uFF29\uFF23 \u265b"],
-    "admin": ["Victor Admin"],
-    "verifier": ["Verifier"],
-    "verified_unlock": ["Buyer", "Seller", "Blackmarket"],
-    "blackmarket": ["Blackmarket"],
-    "seller": ["Seller"],
-    "buyer": ["Buyer"]
+    "owner": [
+      "@\u265b \uff28\uff22\uff29\uff23 \u265b"
+    ],
+    "admin": [
+      "Victor Admin"
+    ],
+    "verifier": [
+      "Verifier"
+    ],
+    "verified_unlock": [
+      "Buyer",
+      "Seller",
+      "Blackmarket"
+    ],
+    "blackmarket": [
+      "Blackmarket"
+    ],
+    "seller": [
+      "Seller"
+    ],
+    "buyer": [
+      "Buyer"
+    ]
   },
-  "required_tags": ["#highrise", "#verified"],
+  "required_tags": [
+    "#highrise",
+    "#verified"
+  ],
   "required_regex": [],
   "forbidden_regex": [],
   "require_username_in_bio": true,
@@ -21,5 +40,7 @@
   "log_channel_id": null,
   "highrise_api_base_url": "https://webapi.highrise.game",
   "highrise_api_key": null,
-  "verification_max_failures": 2
+  "verification_max_failures": 2,
+  "verify_channel_id": 922322774251409448,
+  "welcome_channel_id": 865369205519941663
 }

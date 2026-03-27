@@ -35,13 +35,7 @@ class AdminCog(commands.Cog):
 
     async def _run_sync_action(self) -> discord.Embed:
         synced = await self.bot.tree.sync()
-        embed = embeds.make_embed(
-            embeds.TITLE_ADMIN,
-            "Slash commands resynced. Verify is back on the board and the rest can wait their turn.",
-            embeds.COLOR_OK,
-        )
-        embed.add_field(name="[SYNCED]", value=str(len(synced)), inline=True)
-        return embed
+        return embeds.sync_success_embed(len(synced))
 
     async def handle_console_sync_button(self, interaction: discord.Interaction) -> None:
         author = interaction.user

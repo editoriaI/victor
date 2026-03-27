@@ -8,7 +8,7 @@ from bot import embeds
 from bot.config import Config
 
 HELP_OPTIONS = (
-    ("verify", "🕯️ Verify", "Issue code challenges and check verification status"),
+    ("verify", "🕯️ Verify", "Open intake and send the username to staff approval"),
     ("status", "🖤 Status", "Check where a verification thread currently stands"),
     ("manualverify", "📎 Manual Verify", "Finish a review case after the automated checks stall"),
     ("sync", "📟 Sync", "Resync Victor's slash tree with Discord"),
@@ -72,17 +72,17 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "verify":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // VERIFY",
-            "open the intake prompt, collect the member's Highrise username, and file it cleanly into Victor's record.",
+            "verify opens an intake thread, collects a Highrise username, and sends it to staff for approval before logging.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(
             name="[TEXT]",
-            value="!verify @user username",
+            value="!verify",
             inline=False,
         )
         embed.add_field(
             name="[SLASH]",
-            value="/verify member highrise_username",
+            value="/verify",
             inline=False,
         )
         embed.add_field(
@@ -90,13 +90,14 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
             value=(
                 "phase 01: victor opens intake.\n"
                 "phase 02: the member submits their HR username in the prompt.\n"
-                "phase 03: victor stores it, updates nickname when possible, and closes the file."
+                "phase 03: victor posts it to staff with accept or reject buttons.\n"
+                "phase 04: staff approval files it, updates nickname when possible, and closes the file."
             ),
             inline=False,
         )
         embed.add_field(
             name="[NOTES]",
-            value="members can run their own intake. staff can still correct or override with manual verify when needed.",
+            value="run this in the server's hr-id lane. members can run their own intake there, staff signs off in the console, and manualverify still exists for corrections or overrides.",
             inline=False,
         )
         return embed
@@ -104,19 +105,19 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "status":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // STATUS",
-            "pull the current verification thread and see exactly where the ritual is stuck.",
+            "status shows whether your intake is pending, needs a retry, or has already been logged.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[TEXT]", value="!status\n!status @user", inline=False)
         embed.add_field(name="[SLASH]", value="/status [member]", inline=False)
         embed.add_field(
             name="[RETURNS]",
-            value="verified state, linked Highrise username, pending code if one exists, and the current fail count.",
+            value="status shows whether your intake is pending, needs a retry, or has already been logged.",
             inline=False,
         )
         embed.add_field(
             name="[NOTES]",
-            value="members can inspect themselves. verifier or Victor Admin is required to inspect someone else.",
+            value="use status in the hr-id lane. verifier or Victor Admin is required to inspect someone else.",
             inline=False,
         )
         return embed
@@ -124,7 +125,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "manualverify":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // MANUAL",
-            "use this when a verify case has landed on the staff desk and a human needs to stamp it through.",
+            "manualverify allows staff to override, correct, or directly log a username.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[TEXT]", value="!manualverify @user [username]", inline=False)
@@ -144,7 +145,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "sync":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // SYNC",
-            "this is the command-tree reset. use it when discord's slash state starts acting stale or confused.",
+            "sync refreshes the slash command tree when Discord starts acting unstable.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[TEXT]", value="!sync", inline=False)
@@ -232,7 +233,8 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
                 "`20xx` text command success\n"
                 "`24xx` text command failure\n"
                 "`90xx` staff crash thread\n"
-                "`9101` verify manual review"
+                "`9101` verify manual review\n"
+                "`9102` verify intake is waiting for staff approval"
             ),
             inline=False,
         )

@@ -149,6 +149,44 @@ def upsert_verification_code(
     )
 
 
+def queue_verification_review(
+    conn: sqlite3.Connection,
+    user_id: int,
+    highrise_username: str,
+    *,
+    code: str = "SELF-REPORTED",
+    highrise_user_id: Optional[str] = None,
+) -> None:
+    now = _utc_now()
+    conn.execute(
+        """
+        INSERT INTO verification_codes (
+          user_id,
+          highrise_user_id,
+          highrise_username,
+          code,
+          status,
+          fail_count,
+          last_error,
+          created_at,
+          updated_at,
+          verified_at
+        )
+        VALUES (?, ?, ?, ?, 'PENDING', 0, NULL, ?, ?, NULL)
+        ON CONFLICT(user_id) DO UPDATE SET
+          highrise_user_id = excluded.highrise_user_id,
+          highrise_username = excluded.highrise_username,
+          code = excluded.code,
+          status = 'PENDING',
+          fail_count = 0,
+          last_error = NULL,
+          updated_at = excluded.updated_at,
+          verified_at = NULL
+        """,
+        (user_id, highrise_user_id, highrise_username, code, now, now),
+    )
+
+
 def fetch_verification_code(conn: sqlite3.Connection, user_id: int) -> Optional[Dict[str, Any]]:
     row = conn.execute(
         "SELECT * FROM verification_codes WHERE user_id = ? ORDER BY id DESC LIMIT 1",
@@ -192,6 +230,27 @@ def increment_verification_fail(conn: sqlite3.Connection, user_id: int, status: 
         (fail_count, status, error_message, now, user_id),
     )
     return fail_count
+
+
+def set_verification_status(
+    conn: sqlite3.Connection,
+    user_id: int,
+    status: str,
+    *,
+    error_message: Optional[str] = None,
+) -> None:
+    now = _utc_now()
+    conn.execute(
+        """
+        UPDATE verification_codes
+        SET status = ?,
+            last_error = ?,
+            updated_at = ?,
+            verified_at = CASE WHEN ? = 'VERIFIED' THEN ? ELSE verified_at END
+        WHERE user_id = ?
+        """,
+        (status, error_message, now, status, now, user_id),
+    )
 
 
 def clear_verification_error(conn: sqlite3.Connection, user_id: int) -> None:

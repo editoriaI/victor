@@ -7,6 +7,7 @@ from discord.ext import commands
 
 from bot import db
 from bot import embeds
+from bot.cogs.staff_console import send_verify_intake_review_post
 from bot.config import Config
 from bot.utils.permissions import has_any_role, normalize_role_name
 
@@ -83,6 +84,34 @@ class VerifyCog(commands.Cog):
         finally:
             conn.close()
 
+    def _verify_channel_mention(self) -> Optional[str]:
+        if not self.cfg.verify_channel_id:
+            return None
+        return f"<#{self.cfg.verify_channel_id}>"
+
+    def _is_verify_channel(self, channel_id: Optional[int]) -> bool:
+        if not self.cfg.verify_channel_id:
+            return True
+        return channel_id == self.cfg.verify_channel_id
+
+    async def _redirect_to_verify_channel_for_context(self, ctx: commands.Context) -> bool:
+        if not ctx.guild or self._is_verify_channel(getattr(ctx.channel, "id", None)):
+            return False
+        mention = self._verify_channel_mention()
+        if mention:
+            await ctx.send(embed=embeds.verify_channel_redirect_embed(mention))
+            return True
+        return False
+
+    async def _redirect_to_verify_channel_for_interaction(self, interaction: discord.Interaction) -> bool:
+        if not interaction.guild or self._is_verify_channel(interaction.channel_id):
+            return False
+        mention = self._verify_channel_mention()
+        if mention:
+            await self._send_interaction_embed(interaction, embeds.verify_channel_redirect_embed(mention), ephemeral=True)
+            return True
+        return False
+
     async def _send_interaction_embed(
         self,
         interaction: discord.Interaction,
@@ -155,23 +184,32 @@ class VerifyCog(commands.Cog):
         user_row = payload["user_row"]
         code_row = payload["code_row"]
         last_ver = payload["last_ver"]
+        verification_status = str((code_row or {}).get("status") or "").upper()
 
-        if last_ver and last_ver.get("result") == "PASS":
-            verified = "YES"
-            state = "USERNAME LOGGED"
-        elif code_row and code_row.get("status") == "VERIFIED":
-            verified = "YES"
-            state = "USERNAME LOGGED"
-        elif code_row and code_row.get("status") == "PENDING":
+        if verification_status == "PENDING":
             verified = "PENDING"
-            state = "INTAKE OPEN"
+            state = "STAFF REVIEW"
+        elif verification_status == "REJECTED":
+            verified = "NO"
+            state = "RETRY REQUESTED"
+        elif last_ver and last_ver.get("result") == "PASS":
+            verified = "YES"
+            state = "USERNAME LOGGED"
+        elif verification_status == "VERIFIED":
+            verified = "YES"
+            state = "USERNAME LOGGED"
         else:
             verified = "NO"
             state = "NO DATA"
 
+        highrise_username = (
+            (code_row or {}).get("highrise_username")
+            or user_row.get("highrise_username")
+        )
+
         return embeds.status_embed(
             target.mention,
-            user_row.get("highrise_username"),
+            highrise_username,
             verified,
             state=state,
             code=None,
@@ -207,12 +245,61 @@ class VerifyCog(commands.Cog):
         payload = self._status_payload(member)
         if not payload:
             return None
-        return str(payload["user_row"].get("highrise_username") or "").strip() or None
+        return (
+            str((payload.get("code_row") or {}).get("highrise_username") or "").strip()
+            or str(payload["user_row"].get("highrise_username") or "").strip()
+            or None
+        )
 
     def _build_verify_prompt_embed(self, member: discord.Member) -> discord.Embed:
         return embeds.verify_prompt_embed(member.mention, existing_username=self._existing_username(member))
 
-    async def _capture_highrise_username(
+    async def _queue_highrise_username_submission(
+        self,
+        actor_id: str,
+        member: discord.Member,
+        highrise_username: str,
+        *,
+        source: str,
+    ) -> discord.Embed:
+        conn = db.get_connection(self.cfg.db_path)
+        previous_username: Optional[str] = None
+        try:
+            previous = db.fetch_user_by_discord_id(conn, str(member.id))
+            previous_username = str((previous or {}).get("highrise_username") or "").strip() or None
+            user_id = db.upsert_user(
+                conn,
+                str(member.id),
+                previous_username or highrise_username,
+                int((previous or {}).get("linked") or 0),
+                highrise_user_id=(previous or {}).get("highrise_user_id"),
+            )
+            db.queue_verification_review(conn, user_id, highrise_username)
+            db.log_audit(
+                conn,
+                actor_id=actor_id,
+                action="VERIFY_USERNAME_SUBMITTED",
+                target_id=str(member.id),
+                details=(
+                    f"username={highrise_username}|source={source}|"
+                    f"previous_username={previous_username or 'NONE'}"
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        await send_verify_intake_review_post(
+            self.bot,
+            self.cfg,
+            member=member,
+            highrise_username=highrise_username,
+            submitted_by_id=int(actor_id),
+            previous_username=previous_username,
+        )
+        return embeds.verify_submission_received_embed(member.mention, highrise_username)
+
+    async def _approve_highrise_username(
         self,
         actor_id: str,
         member: discord.Member,
@@ -220,6 +307,7 @@ class VerifyCog(commands.Cog):
         *,
         source: str,
         manual: bool = False,
+        staff_view: bool = False,
     ) -> discord.Embed:
         conn = db.get_connection(self.cfg.db_path)
         try:
@@ -264,6 +352,17 @@ class VerifyCog(commands.Cog):
             conn.close()
 
         nickname_changed, unlocked_roles = await self._apply_verified_access(member, highrise_username)
+
+        approval_notice = embeds.approval_dm_embed(highrise_username)
+        try:
+            await member.send(embed=approval_notice)
+        except discord.HTTPException:
+            self.logger.info("Could not DM approval notice to %s", member.id)
+
+        if manual:
+            return embeds.manual_verify_ready_embed(member.mention, highrise_username)
+        if staff_view:
+            return embeds.verify_staff_approved_embed(member.mention, highrise_username)
         return embeds.verify_success_embed(
             member.mention,
             highrise_username,
@@ -272,6 +371,38 @@ class VerifyCog(commands.Cog):
             manual=manual,
             captured=not manual,
         )
+
+    async def _reject_highrise_username(
+        self,
+        actor_id: str,
+        member: discord.Member,
+        highrise_username: str,
+        *,
+        source: str,
+    ) -> discord.Embed:
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            user_row = db.fetch_user_by_discord_id(conn, str(member.id))
+            if not user_row:
+                return embeds.verify_missing_record_embed(member.mention)
+            db.increment_verification_fail(conn, int(user_row["id"]), "REJECTED", "Rejected by staff review.")
+            db.log_audit(
+                conn,
+                actor_id=actor_id,
+                action="VERIFY_USERNAME_REJECTED",
+                target_id=str(member.id),
+                details=f"username={highrise_username}|source={source}",
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        rejection_embed = embeds.rejection_dm_embed(highrise_username)
+        try:
+            await member.send(embed=rejection_embed)
+        except discord.HTTPException:
+            self.logger.info("Could not DM rejection notice to %s", member.id)
+        return embeds.verify_staff_rejected_embed(member.mention, highrise_username)
 
     async def _send_verify_prompt_to_context(self, ctx: commands.Context, member: discord.Member) -> None:
         embed = self._build_verify_prompt_embed(member)
@@ -373,18 +504,19 @@ class VerifyCog(commands.Cog):
             )
             return
 
-        embed = await self._capture_highrise_username(
+        embed = await self._queue_highrise_username_submission(
             str(actor.id),
             target,
             username,
             source="intake_modal",
-            manual=False,
         )
         await self._send_interaction_embed(interaction, embed, ephemeral=True)
 
     async def handle_menu_verify_button(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
             return
         actor = interaction.user
         if not isinstance(actor, discord.Member):
@@ -395,6 +527,8 @@ class VerifyCog(commands.Cog):
     async def handle_menu_status_button(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
             return
         actor = interaction.user
         if not isinstance(actor, discord.Member):
@@ -439,12 +573,80 @@ class VerifyCog(commands.Cog):
             )
             return
 
-        result = await self._capture_highrise_username(
+        result = await self._approve_highrise_username(
             str(actor.id),
             target,
             username,
             source="staff_console",
             manual=True,
+        )
+        await self._send_interaction_embed(interaction, result)
+
+    async def handle_console_accept_username_button(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild or not interaction.message or not interaction.message.embeds:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member) or not self._can_manage_verification(actor):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
+            return
+
+        embed = interaction.message.embeds[0]
+        member_id = self._extract_target_member_id(embed)
+        username = self._normalize_highrise_username(self._embed_field_value(embed, "[HIGHRISE]") or "")
+        if not member_id or not username:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+
+        target = interaction.guild.get_member(member_id)
+        if target is None:
+            try:
+                target = await interaction.guild.fetch_member(member_id)
+            except discord.HTTPException:
+                await self._send_interaction_embed(interaction, embeds.not_found_embed(str(member_id)))
+                return
+
+        result = await self._approve_highrise_username(
+            str(actor.id),
+            target,
+            username,
+            source="staff_console_accept",
+            manual=False,
+            staff_view=True,
+        )
+        await self._send_interaction_embed(interaction, result)
+
+    async def handle_console_reject_username_button(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild or not interaction.message or not interaction.message.embeds:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member) or not self._can_manage_verification(actor):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
+            return
+
+        embed = interaction.message.embeds[0]
+        member_id = self._extract_target_member_id(embed)
+        username = self._normalize_highrise_username(self._embed_field_value(embed, "[HIGHRISE]") or "")
+        if not member_id or not username:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+
+        target = interaction.guild.get_member(member_id)
+        if target is None:
+            try:
+                target = await interaction.guild.fetch_member(member_id)
+            except discord.HTTPException:
+                await self._send_interaction_embed(interaction, embeds.not_found_embed(str(member_id)))
+                return
+
+        result = await self._reject_highrise_username(
+            str(actor.id),
+            target,
+            username,
+            source="staff_console_reject",
         )
         await self._send_interaction_embed(interaction, result)
 
@@ -479,6 +681,8 @@ class VerifyCog(commands.Cog):
 
     @commands.command(name="verify")
     async def verify(self, ctx: commands.Context) -> None:
+        if await self._redirect_to_verify_channel_for_context(ctx):
+            return
         author_blacklist = self._blacklist_record(str(ctx.author.id))
         if author_blacklist and not self._is_admin(ctx.author):
             await ctx.send(embed=embeds.blacklisted_embed(author_blacklist.get("reason")))
@@ -492,6 +696,8 @@ class VerifyCog(commands.Cog):
         member: discord.Member,
         highrise_username: Optional[str] = None,
     ) -> None:
+        if await self._redirect_to_verify_channel_for_context(ctx):
+            return
         if not self._can_manage_verification(ctx.author):
             await ctx.send(embed=embeds.permission_denied_embed("Verifier"))
             return
@@ -503,7 +709,7 @@ class VerifyCog(commands.Cog):
             )
             return
 
-        embed = await self._capture_highrise_username(
+        embed = await self._approve_highrise_username(
             str(ctx.author.id),
             member,
             username,
@@ -514,6 +720,8 @@ class VerifyCog(commands.Cog):
 
     @commands.command(name="status")
     async def status(self, ctx: commands.Context, member: Optional[discord.Member] = None) -> None:
+        if await self._redirect_to_verify_channel_for_context(ctx):
+            return
         target = member or ctx.author
         if member and member != ctx.author and not self._can_view_others(ctx.author):
             await ctx.send(embed=embeds.permission_denied_embed("Verifier"))
@@ -533,6 +741,8 @@ class VerifyCog(commands.Cog):
     @app_commands.command(name="verify", description="Open Victor's Highrise username intake.")
     @app_commands.guild_only()
     async def verify_slash(self, interaction: discord.Interaction) -> None:
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
+            return
         author = interaction.user
         if not isinstance(author, discord.Member):
             await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
@@ -554,6 +764,8 @@ class VerifyCog(commands.Cog):
         member: discord.Member,
         highrise_username: Optional[str] = None,
     ) -> None:
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
+            return
         author = interaction.user
         if not isinstance(author, discord.Member):
             await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
@@ -570,7 +782,7 @@ class VerifyCog(commands.Cog):
             )
             return
 
-        embed = await self._capture_highrise_username(
+        embed = await self._approve_highrise_username(
             str(author.id),
             member,
             username,
@@ -583,6 +795,8 @@ class VerifyCog(commands.Cog):
     @app_commands.describe(member="Optional member to look up")
     @app_commands.guild_only()
     async def status_slash(self, interaction: discord.Interaction, member: Optional[discord.Member] = None) -> None:
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
+            return
         author = interaction.user
         if not isinstance(author, discord.Member):
             await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
