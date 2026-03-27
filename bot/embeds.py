@@ -230,8 +230,33 @@ def verify_join_embed(user_mention: str, verify_channel_mention: str) -> discord
         COLOR_WARN,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
-    embed.add_field(name="[CHANNEL]", value=verify_channel_mention, inline=True)
-    embed.add_field(name="[NEXT]", value=f"head to {verify_channel_mention} and run `/verify` or `!verify`.", inline=False)
+    embed.add_field(name="[START HERE]", value=verify_channel_mention, inline=True)
+    embed.add_field(name="[WHY]", value="keep your Highrise username logged cleanly from day one.", inline=True)
+    embed.add_field(
+        name="[HOW TO VERIFY]",
+        value=(
+            f"1. Go to {verify_channel_mention}\n"
+            "2. Run `/verify` or `!verify`\n"
+            "3. Submit your exact Highrise username\n"
+            "4. Wait for staff approval"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="[WHAT HAPPENS NEXT]",
+        value=(
+            "once staff clears it, Victor logs the username, updates your nickname when possible, "
+            "and keeps your record readable."
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="[IMPORTANT]",
+        value=(
+            "use the exact Highrise handle you want on file. if staff rejects it, just run verify again and resend it cleanly."
+        ),
+        inline=False,
+    )
     return embed
 
 
