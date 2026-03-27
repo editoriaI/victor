@@ -323,6 +323,25 @@ def create_bot(cfg) -> commands.Bot:
                 return
 
     @bot.event
+    async def on_message(message: discord.Message) -> None:
+        if message.author.bot:
+            return
+
+        if bot.user and bot.user in message.mentions and not message.content.strip().startswith(cfg.prefix):
+            verify_channel_mention = f"<#{cfg.verify_channel_id}>" if cfg.verify_channel_id else None
+            try:
+                async with message.channel.typing():
+                    await asyncio.sleep(1.4)
+                await message.reply(
+                    embed=embeds.victor_intro_embed(message.author.mention, verify_channel_mention),
+                    mention_author=False,
+                )
+            except (discord.HTTPException, discord.Forbidden):
+                pass
+
+        await bot.process_commands(message)
+
+    @bot.event
     async def on_app_command_completion(
         interaction: discord.Interaction, command: discord.app_commands.Command
     ) -> None:

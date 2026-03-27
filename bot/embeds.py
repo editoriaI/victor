@@ -279,6 +279,41 @@ def verify_current_members_embed(verify_channel_mention: str) -> discord.Embed:
     return embed
 
 
+def victor_intro_embed(user_mention: str, verify_channel_mention: Optional[str] = None) -> discord.Embed:
+    embed = make_embed(
+        TITLE_HELP,
+        "well. i'm awake.\n\nname's Victor. undead intern. paperwork handler. server-side nuisance with a filing system.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[TAGGED]", value=user_mention, inline=True)
+    embed.add_field(name="[ROLE]", value="Highrise intake + staff-signoff desk", inline=True)
+    embed.add_field(name="[MOOD]", value="clocked in against my will", inline=True)
+    embed.add_field(
+        name="[WHAT I HANDLE]",
+        value=(
+            "- Highrise username intake\n"
+            "- staff approval and rejection flow\n"
+            "- status checks on who's logged and who's still stalling"
+        ),
+        inline=False,
+    )
+    if verify_channel_mention:
+        embed.add_field(
+            name="[START HERE]",
+            value=(
+                f"if your Highrise username is not on file yet, go to {verify_channel_mention} and run `/verify` or `!verify`.\n"
+                "Victor is cleaning house."
+            ),
+            inline=False,
+        )
+    embed.add_field(
+        name="[CURRENT STATE]",
+        value="verify is live, routed to the proper lane, and staff now signs off before anything gets buried in the system.",
+        inline=False,
+    )
+    return embed
+
+
 def verify_code_embed(user_mention: str, highrise_username: str, code: str) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
