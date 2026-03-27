@@ -105,7 +105,7 @@ def verify_success_embed(
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "[ VERIFICATION COMPLETE \u2714 ]\n\nSigned. Filed. Buried in the system.\n\nYour username is now on record.\nDo not make me reopen this file.",
+        "[ VERIFICATION COMPLETE \u2714 ]\n\nYour Highrise username is locked in and the tidy file is sealed.\nYou’re cleared to move on—staff already gave the green light.",
         COLOR_OK,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -132,7 +132,7 @@ def verify_success_embed(
 def verify_submission_received_embed(user_mention: str, highrise_username: str) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "[ INTAKE RECEIVED ]\n\nGood. It's on the desk now.\n\nStaff will decide if this belongs in the system\nor back in your drafts where it came from.\n\nTry patience. It builds character.",
+        "[ INTAKE RECEIVED ]\n\nNice work! Staff has your username and is reviewing it now.\nYou’ll get a quick update once they approve or suggest tweaks, so stay calm and know the file is moving.",
         COLOR_WARN,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -140,7 +140,7 @@ def verify_submission_received_embed(user_mention: str, highrise_username: str) 
     embed.add_field(name="[STATE]", value="AWAITING STAFF REVIEW", inline=True)
     embed.add_field(
         name="[THREAD]",
-        value="staff will confirm the username from the console post. once they approve it, victor closes the loop.",
+        value="Staff will confirm the username from the console post, and Victor closes the loop once it’s done.",
         inline=False,
     )
     return embed
@@ -206,7 +206,7 @@ def verify_staff_action_result_embed(action: str, user_mention: str, channel_men
 def verify_prompt_embed(user_mention: str, existing_username: Optional[str] = None) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "[ INTAKE THREAD OPENED ]\n\nStay still.\n\nVictor only needs your Highrise username.\nKeep it clean. Keep it exact.\n\nThis record is permanent. I would prefer not to fix it later.",
+        "[ INTAKE THREAD OPENED ]\n\nThanks for keeping us organized! Drop your exact Highrise username and Victor will relay it to staff.\nThe cleaner the entry, the faster the desk can seal it up, and this thread closes itself once the intake finishes.",
         COLOR_NEUTRAL,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -214,14 +214,14 @@ def verify_prompt_embed(user_mention: str, existing_username: Optional[str] = No
     embed.add_field(name="[MODE]", value="member intake", inline=True)
     embed.add_field(
         name="[THREAD]",
-        value="click the button below, drop your HR username into the prompt, and victor will hand it to staff for a clean sign-off.",
+        value="Hit the button, paste your username, and Victor will keep the record tidy while staff signs off.",
         inline=False,
     )
     if existing_username:
         embed.add_field(name="[ON FILE]", value=existing_username, inline=True)
     embed.add_field(
         name="[WHY]",
-        value="this keeps Discord-side verification readable without asking people to trade or prove anything off-platform.",
+        value="We keep everything readable without asking for private proof—just your clean Highrise handle.",
         inline=False,
     )
     return embed
