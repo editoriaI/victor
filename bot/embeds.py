@@ -242,7 +242,7 @@ def verify_channel_redirect_embed(channel_mention: str) -> discord.Embed:
 def verify_private_intake_embed(channel_mention: str) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "[ PRIVATE INTAKE ONLY ]\n\nVictor keeps the actual intake prompt private.\n\nUse `/verify` in the verify lane so your username submission stays off the public floor.",
+        "[ VERIFY INTAKE ]\n\nVictor runs intake in the verify lane.\n\nUse `!verify` there and the prompt will open without making a mess on the public floor.",
         COLOR_WARN,
     )
     embed.add_field(
@@ -252,7 +252,7 @@ def verify_private_intake_embed(channel_mention: str) -> discord.Embed:
     )
     embed.add_field(
         name="[NEXT]",
-        value=f"go to {channel_mention} and run `/verify` for the private intake prompt.",
+        value=f"go to {channel_mention} and run `!verify` to open intake.",
         inline=False,
     )
     return embed
@@ -271,7 +271,7 @@ def verify_join_embed(user_mention: str, verify_channel_mention: str) -> discord
         name="[HOW TO VERIFY]",
         value=(
             f"1. Go to {verify_channel_mention}\n"
-            "2. Run `/verify` or `!verify`\n"
+            "2. Run `!verify`\n"
             "3. Submit your exact Highrise username\n"
             "4. Wait for staff approval"
         ),
@@ -303,7 +303,7 @@ def verify_current_members_embed(verify_channel_mention: str) -> discord.Embed:
     )
     embed.add_field(
         name="[WHERE TO GO]",
-        value=f"use {verify_channel_mention} for `/verify`, `!verify`, `/status`, or `!status`.",
+        value=f"use {verify_channel_mention} for `!verify` and `!status`.",
         inline=False,
     )
     embed.add_field(
@@ -333,7 +333,7 @@ def victor_intro_embed(user_mention: str, verify_channel_mention: Optional[str] 
         "you will need to be verified.\n\n"
         "Unlogged users don\u2019t get full access.\n"
         "That\u2019s not personal. That\u2019s structure.\n\n"
-        "Run `/verify` and enter the system.\n\n"
+        "Run `!verify` and enter the system.\n\n"
         "Or don\u2019t.\n\n"
         "Just understand some doors will remain closed,\n"
         "and I won\u2019t be the one opening them for you.",
@@ -355,7 +355,7 @@ def victor_intro_embed(user_mention: str, verify_channel_mention: Optional[str] 
         embed.add_field(
             name="[START HERE]",
             value=(
-                f"go to {verify_channel_mention} and run `/verify`.\n"
+                f"go to {verify_channel_mention} and run `!verify`.\n"
                 "that is the lane. use it."
             ),
             inline=False,
@@ -498,7 +498,7 @@ def verify_missing_record_embed(user_mention: str) -> discord.Embed:
         COLOR_WARN,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
-    embed.add_field(name="[NEXT]", value="run `!verify`, `/verify`, or use the Verify button from `menu` to open intake.", inline=False)
+    embed.add_field(name="[NEXT]", value="run `!verify` or use the Verify button from `!menu` to open intake.", inline=False)
     return embed
 
 
@@ -574,7 +574,7 @@ def blacklisted_embed(reason: Optional[str]) -> discord.Embed:
 def sync_success_embed(synced_count: int) -> discord.Embed:
     embed = make_embed(
         TITLE_ADMIN,
-        "[ SYNC COMPLETE \u2714 ]\n\nSlash tree resynced.\n\nSystem aligned. I can breathe again.\nFiguratively.",
+        "[ SYNC COMPLETE \u2714 ]\n\nCommand registry refreshed.\n\nSystem aligned. I can breathe again.\nFiguratively.",
         COLOR_OK,
     )
     embed.add_field(name="[SYNCED]", value=str(synced_count), inline=True)
@@ -710,9 +710,9 @@ def help_embed() -> discord.Embed:
         "pick a live thread from the menu. the rest are still backstage.",
         COLOR_NEUTRAL,
     )
-    embed.add_field(name="[MENU]", value="!menu, /menu", inline=True)
+    embed.add_field(name="[MENU]", value="!menu", inline=True)
     embed.add_field(name="[VERIFY]", value="!verify, !manualverify, !status", inline=True)
-    embed.add_field(name="[ADMIN]", value="!sync, /sync", inline=True)
+    embed.add_field(name="[ADMIN]", value="!sync", inline=True)
     embed.add_field(name="[PARKED]", value="blackmarket, matchmaking, restart", inline=True)
     embed.add_field(
         name="[VERIFY FLOW]",

@@ -1,7 +1,6 @@
 from typing import Callable, Optional
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from bot import embeds
@@ -11,7 +10,7 @@ HELP_OPTIONS = (
     ("verify", "🕯️ Verify", "Open intake and send the username to staff approval"),
     ("status", "🖤 Status", "Check where a verification thread currently stands"),
     ("manualverify", "📎 Manual Verify", "Finish a review case after the automated checks stall"),
-    ("sync", "📟 Sync", "Resync Victor's slash tree with Discord"),
+    ("sync", "📟 Sync", "Refresh Victor's command registry"),
     ("parked", "🦇 Parked", "Features still waiting to come back online"),
 )
 
@@ -23,7 +22,6 @@ def build_menu_embed() -> discord.Embed:
         embeds.COLOR_NEUTRAL,
     )
     embed.add_field(name="[LIVE TEXT]", value="!menu\n!help\n!verify\n!manualverify\n!status\n!sync", inline=False)
-    embed.add_field(name="[LIVE SLASH]", value="/menu\n/help\n/verify\n/manualverify\n/status\n/sync", inline=False)
     embed.add_field(
         name="[HOW THIS BOARD WORKS]",
         value=(
@@ -81,11 +79,6 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
             inline=False,
         )
         embed.add_field(
-            name="[SLASH]",
-            value="/verify",
-            inline=False,
-        )
-        embed.add_field(
             name="[FLOW]",
             value=(
                 "phase 01: victor opens intake.\n"
@@ -109,7 +102,6 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[TEXT]", value="!status\n!status @user", inline=False)
-        embed.add_field(name="[SLASH]", value="/status [member]", inline=False)
         embed.add_field(
             name="[RETURNS]",
             value="status shows whether your intake is pending, needs a retry, or has already been logged.",
@@ -129,7 +121,6 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[TEXT]", value="!manualverify @user [username]", inline=False)
-        embed.add_field(name="[SLASH]", value="/manualverify member [highrise_username]", inline=False)
         embed.add_field(
             name="[WHEN TO USE IT]",
             value="use it when staff needs to correct a username on file, finish a stuck case, or override the intake manually.",
@@ -145,14 +136,13 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "sync":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // SYNC",
-            "sync refreshes the slash command tree when Discord starts acting unstable.",
+            "sync refreshes Victor's command registry when Discord starts acting unstable.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[TEXT]", value="!sync", inline=False)
-        embed.add_field(name="[SLASH]", value="/sync", inline=False)
         embed.add_field(
             name="[WHEN TO USE IT]",
-            value="after deploys, after command reloads, or when staff crash threads specifically tell you the slash tree needs a resync.",
+            value="after deploys, after command reloads, or when staff crash threads specifically tell you the command registry needs a refresh.",
             inline=False,
         )
         embed.add_field(
@@ -182,19 +172,6 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
             inline=False,
         )
         embed.add_field(
-            name="[PARKED SLASH]",
-            value=(
-                "/marketlist [query]\n"
-                "/marketadd item_name price\n"
-                "/marketremove listing_id\n"
-                "/request item_name max_price\n"
-                "/cancelrequest request_id\n"
-                "/accept match_id\n"
-                "/decline match_id"
-            ),
-            inline=False,
-        )
-        embed.add_field(
             name="[NOTES]",
             value="help can document them, but victor cannot run them live yet. verify and admin are the active lanes right now.",
             inline=False,
@@ -213,11 +190,6 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
             inline=False,
         )
         embed.add_field(
-            name="[SLASH]",
-            value="/sync\n/manualverify member [highrise_username]\n/status [member]",
-            inline=False,
-        )
-        embed.add_field(
             name="[NOTES]",
             value="Victor Admin handles sync. Verifier or Victor Admin can finish a manual verify. The HBIC owner role bypasses every role gate.",
             inline=False,
@@ -228,8 +200,6 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
                 "`1001` child online\n"
                 "`1101` restart requested\n"
                 "`1102` restart complete\n"
-                "`21xx` slash command success\n"
-                "`25xx` slash command failure\n"
                 "`20xx` text command success\n"
                 "`24xx` text command failure\n"
                 "`90xx` staff crash thread\n"
@@ -363,18 +333,6 @@ class HelpCog(commands.Cog):
     @commands.command(name="menu")
     async def menu_command(self, ctx: commands.Context) -> None:
         await ctx.send(embed=self._menu_embed(), view=MenuView(self._topic_embed))
-
-    @app_commands.command(name="help", description="Show Victor help or a deeper feature guide.")
-    @app_commands.describe(feature="Optional topic: verify, status, manualverify, sync, or parked")
-    async def help_slash(self, interaction: discord.Interaction, feature: Optional[str] = None) -> None:
-        embed = self._topic_embed(feature)
-        view = HelpView(self._topic_embed) if not feature else None
-        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
-
-    @app_commands.command(name="menu", description="Open Victor's live command board.")
-    async def menu_slash(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_message(embed=self._menu_embed(), view=MenuView(self._topic_embed), ephemeral=True)
-
 
 async def setup(bot: commands.Bot) -> None:
     cfg = bot.victor_config

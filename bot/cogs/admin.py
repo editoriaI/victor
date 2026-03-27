@@ -1,7 +1,6 @@
 from typing import Optional
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from bot import embeds
@@ -54,18 +53,6 @@ class AdminCog(commands.Cog):
 
         embed = await self._run_sync_action()
         await ctx.send(embed=embed)
-
-    @app_commands.command(name="sync", description="Resync Victor's slash commands with Discord.")
-    @app_commands.guild_only()
-    async def sync_slash(self, interaction: discord.Interaction) -> None:
-        author = interaction.user
-        if not isinstance(author, discord.Member) or not self._is_admin(author):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Victor Admin"))
-            return
-
-        embed = await self._run_sync_action()
-        await self._send_interaction_embed(interaction, embed)
-
 
 async def setup(bot: commands.Bot) -> None:
     cfg = bot.victor_config
