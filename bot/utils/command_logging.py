@@ -1,5 +1,7 @@
+import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 import discord
@@ -52,6 +54,8 @@ COMMAND_CODES = {
     "unknown": 99,
 }
 
+PATCH_NOTE_ID = "2026-03-26-verify-intake-refresh"
+
 
 def _truncate(value: Optional[str], limit: int = 1024) -> Optional[str]:
     if not value:
@@ -59,6 +63,64 @@ def _truncate(value: Optional[str], limit: int = 1024) -> Optional[str]:
     if len(value) <= limit:
         return value
     return f"{value[: limit - 3]}..."
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _patch_note_state_path() -> Path:
+    return _project_root() / "logs" / "patch-note-state.json"
+
+
+def _load_patch_note_state() -> dict:
+    path = _patch_note_state_path()
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _write_patch_note_state(state: dict) -> None:
+    path = _patch_note_state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def _build_patch_note_embed() -> discord.Embed:
+    embed = discord.Embed(
+        title="patch notes // verify intake refresh",
+        description="victor pushed a quieter, tighter verify pass so the server can collect Highrise usernames without the old bio ritual.",
+        color=STATUS_COLORS["system"],
+        timestamp=datetime.now(timezone.utc),
+    )
+    embed.set_author(name="💿 @victor.intern dropped release notes")
+    embed.set_footer(text="v i c t o r . s o c i a l // patch desk")
+    embed.add_field(
+        name="What Changed",
+        value=(
+            "- `verify` now opens a member intake prompt instead of checking the Highrise bio\n"
+            "- members submit their HR username directly in Victor's prompt\n"
+            "- Victor stores the username, updates nickname when possible, and keeps it on file"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="Menu Lane",
+        value="the `menu` verify button now launches the intake flow directly instead of just showing help text.",
+        inline=False,
+    )
+    embed.add_field(
+        name="Status + Staff",
+        value="`status` reads the username on file, and staff still has manual verify for corrections or overrides.",
+        inline=False,
+    )
+    embed.add_field(
+        name="Live Commands",
+        value="`menu`, `help`, `verify`, `manualverify`, `status`, and `sync` are the active lanes right now.",
+        inline=False,
+    )
+    return embed
 
 
 def _format_location(location: Optional[str]) -> Optional[str]:
@@ -208,21 +270,23 @@ async def send_log_channel(
     message: Optional[str] = None,
     embed: Optional[discord.Embed] = None,
     view: Optional[discord.ui.View] = None,
-) -> None:
+) -> bool:
     channel_id = cfg.log_channel_id
     if not channel_id:
-        return
+        return False
     channel = bot.get_channel(channel_id)
     if channel is None:
         try:
             channel = await bot.fetch_channel(channel_id)
         except (discord.HTTPException, discord.Forbidden, discord.NotFound):
-            return
+            return False
     if isinstance(channel, (discord.TextChannel, discord.Thread)):
         try:
             await channel.send(content=message, embed=embed, view=view)
+            return True
         except (discord.HTTPException, discord.Forbidden):
-            return
+            return False
+    return False
 
 
 def format_command_log(
@@ -294,3 +358,20 @@ async def log_system_event(
         return
     embed = _build_feed_embed("system", details=details, system_title=title)
     await send_log_channel(bot, cfg, message=None, embed=embed)
+
+
+async def maybe_publish_patch_note(bot: commands.Bot, cfg: Config) -> None:
+    if not cfg.log_channel_id:
+        return
+    state = _load_patch_note_state()
+    if state.get("last_patch_note_id") == PATCH_NOTE_ID:
+        return
+    sent = await send_log_channel(bot, cfg, embed=_build_patch_note_embed())
+    if not sent:
+        return
+    _write_patch_note_state(
+        {
+            "last_patch_note_id": PATCH_NOTE_ID,
+            "posted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+    )

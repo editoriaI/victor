@@ -19,7 +19,7 @@ HELP_OPTIONS = (
 def build_menu_embed() -> discord.Embed:
     embed = embeds.make_embed(
         f"{embeds.TITLE_HELP} // MENU",
-        "command board loaded. tap a lane below and victor will open the matching panel in the ui.",
+        "command board loaded. tap a lane below and victor will either launch the flow or open the exact panel you need.",
         embeds.COLOR_NEUTRAL,
     )
     embed.add_field(name="[LIVE TEXT]", value="!menu\n!help\n!verify\n!manualverify\n!status\n!sync", inline=False)
@@ -27,8 +27,10 @@ def build_menu_embed() -> discord.Embed:
     embed.add_field(
         name="[HOW THIS BOARD WORKS]",
         value=(
-            "each button opens a focused embed for that command.\n"
-            "commands that need arguments still show their exact usage before you run them."
+            "verify launches intake.\n"
+            "status pulls your current file.\n"
+            "manual and parked open focused reference panels.\n"
+            "sync fires only if the clicker has admin access."
         ),
         inline=False,
     )
@@ -70,7 +72,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "verify":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // VERIFY",
-            "issue the code thread, send the user to their bio, then make them prove they updated it.",
+            "open the intake prompt, collect the member's Highrise username, and file it cleanly into Victor's record.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(
@@ -86,15 +88,15 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         embed.add_field(
             name="[FLOW]",
             value=(
-                "phase 01: victor validates the Highrise username and issues a code.\n"
-                "phase 02: the user updates the bio and hits the recheck button.\n"
-                "phase 03: if they keep missing, the case escalates to manual review."
+                "phase 01: victor opens intake.\n"
+                "phase 02: the member submits their HR username in the prompt.\n"
+                "phase 03: victor stores it, updates nickname when possible, and closes the file."
             ),
             inline=False,
         )
         embed.add_field(
             name="[NOTES]",
-            value="Verifier or Victor Admin is required for verification. The HBIC owner role bypasses this.",
+            value="members can run their own intake. staff can still correct or override with manual verify when needed.",
             inline=False,
         )
         return embed
@@ -129,7 +131,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         embed.add_field(name="[SLASH]", value="/manualverify member [highrise_username]", inline=False)
         embed.add_field(
             name="[WHEN TO USE IT]",
-            value="only after the automated verify checks have pushed the case into manual review, unless you intentionally provide a username override.",
+            value="use it when staff needs to correct a username on file, finish a stuck case, or override the intake manually.",
             inline=False,
         )
         embed.add_field(
@@ -308,11 +310,19 @@ class MenuView(discord.ui.View):
 
     @discord.ui.button(label="Verify", style=discord.ButtonStyle.secondary, emoji="🕯️")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_panel(interaction, "verify")
+        verify_cog = interaction.client.get_cog("VerifyCog")
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the intake clipboard.", ephemeral=True)
+            return
+        await verify_cog.handle_menu_verify_button(interaction)
 
     @discord.ui.button(label="Status", style=discord.ButtonStyle.secondary, emoji="🖤")
     async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_panel(interaction, "status")
+        verify_cog = interaction.client.get_cog("VerifyCog")
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the file drawer.", ephemeral=True)
+            return
+        await verify_cog.handle_menu_status_button(interaction)
 
     @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary, emoji="📎")
     async def manual_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -320,7 +330,11 @@ class MenuView(discord.ui.View):
 
     @discord.ui.button(label="Sync", style=discord.ButtonStyle.secondary, emoji="📟")
     async def sync_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_panel(interaction, "sync")
+        admin_cog = interaction.client.get_cog("AdminCog")
+        if admin_cog is None:
+            await interaction.response.send_message("Victor misplaced the admin desk.", ephemeral=True)
+            return
+        await admin_cog.handle_console_sync_button(interaction)
 
     @discord.ui.button(label="Parked", style=discord.ButtonStyle.secondary, emoji="🦇")
     async def parked_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:

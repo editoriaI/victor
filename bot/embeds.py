@@ -95,6 +95,7 @@ def verify_success_embed(
     nickname_changed: bool = False,
     unlocked_roles: Optional[List[str]] = None,
     manual: bool = False,
+    captured: bool = False,
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
@@ -105,13 +106,42 @@ def verify_success_embed(
     embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
     embed.add_field(name="[RESULT]", value="PASS", inline=True)
     notes: List[str] = []
-    notes.append("Manual override applied." if manual else "Code matched in the Highrise bio.")
+    if manual:
+        notes.append("Manual override applied.")
+    elif captured:
+        notes.append("Highrise username captured from member intake.")
+    else:
+        notes.append("Code matched in the Highrise bio.")
     if nickname_changed:
         notes.append("Nickname updated to the Highrise username.")
     if unlocked_roles:
         notes.append(f"Unlocked roles: {', '.join(unlocked_roles)}")
     embed.add_field(name="[THREAD]", value="approved and closed. no more haunting required.", inline=False)
     embed.add_field(name="[NOTES]", value="\n".join(f"- {note}" for note in notes), inline=False)
+    return embed
+
+
+def verify_prompt_embed(user_mention: str, existing_username: Optional[str] = None) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "intake thread opened. victor only needs your Highrise username so the server record stays clean and readable.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[REQUEST]", value="Highrise username", inline=True)
+    embed.add_field(name="[MODE]", value="member intake", inline=True)
+    embed.add_field(
+        name="[THREAD]",
+        value="click the button below, drop your HR username into the prompt, and victor will file it into your record.",
+        inline=False,
+    )
+    if existing_username:
+        embed.add_field(name="[ON FILE]", value=existing_username, inline=True)
+    embed.add_field(
+        name="[WHY]",
+        value="this keeps Discord-side verification readable without asking people to trade or prove anything off-platform.",
+        inline=False,
+    )
     return embed
 
 
@@ -235,6 +265,17 @@ def highrise_api_error_embed(message: str) -> discord.Embed:
     embed = urgent_embed("HIGHRISE API", "the api blinked first. this is a network or endpoint problem, not a user failure.")
     embed.add_field(name="[DETAILS]", value=message[:1024], inline=False)
     embed.add_field(name="[NEXT]", value="retry in a moment. if it keeps happening, staff should check the endpoint path.", inline=False)
+    return embed
+
+
+def verify_missing_record_embed(user_mention: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_STATUS,
+        "there is no Highrise intake on file for this member yet.",
+        COLOR_WARN,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[NEXT]", value="run `!verify`, `/verify`, or use the Verify button from `menu` to open intake.", inline=False)
     return embed
 
 
@@ -414,7 +455,7 @@ def help_embed() -> discord.Embed:
     embed.add_field(name="[PARKED]", value="blackmarket, matchmaking, restart", inline=True)
     embed.add_field(
         name="[VERIFY FLOW]",
-        value="`!verify @user username` opens the ritual, issues a code, and lets the user recheck from the button. `!manualverify` is the staff fallback once a case hits review.",
+        value="`verify` opens intake, collects the member's Highrise username, and stores it on file. `manualverify` stays available for staff corrections or overrides.",
         inline=False,
     )
     embed.add_field(

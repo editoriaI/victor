@@ -14,7 +14,7 @@ from discord.ext import commands
 from bot import embeds
 from bot.config import load_config
 from bot import db
-from bot.utils.command_logging import log_command_event, log_system_event
+from bot.utils.command_logging import log_command_event, log_system_event, maybe_publish_patch_note
 from bot.utils.restart_notice import pop_restart_notice
 
 RESTART_EXIT_CODE = 26
@@ -289,6 +289,7 @@ def create_bot(cfg) -> commands.Bot:
                     f"surface={restart_notice.get('surface')}"
                 ),
             )
+        await maybe_publish_patch_note(bot, cfg)
 
     @bot.event
     async def on_app_command_completion(
