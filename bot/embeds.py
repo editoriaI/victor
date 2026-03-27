@@ -422,7 +422,7 @@ def verify_retry_embed(
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
-        "the recheck came back ugly. the code still is not in the bio.",
+        "The recheck needs a redo: the code isn't in the bio yet, but you're almost there.",
         COLOR_WARN,
     )
     embed.add_field(name="[USER]", value=user_mention, inline=True)
@@ -431,15 +431,12 @@ def verify_retry_embed(
     embed.add_field(name="[FAIL COUNT]", value=f"{fail_count}/{max_failures}", inline=True)
     embed.add_field(
         name="[THREAD]",
-        value="phase 02 of 03 // still pending. the user needs to fix the bio before staff should step in.",
+        value="phase 02 of 03 • waiting on the bio update. quick fix? edit the bio and hit confirm again.",
         inline=False,
     )
     embed.add_field(
         name="[NEXT]",
-        value=(
-            "have them update the Highrise bio and press the confirm button again.\n"
-            "if the next check misses too, this thread escalates to manual review."
-        ),
+        value="ask the member to update their Highrise bio, rerun the check, and let this thread timeout itself before staff leaps in.",
         inline=False,
     )
     return embed
