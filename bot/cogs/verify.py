@@ -89,6 +89,29 @@ class VerifyCog(commands.Cog):
             return None
         return f"<#{self.cfg.verify_channel_id}>"
 
+    async def _send_verify_lane_notice(
+        self,
+        guild: discord.Guild,
+        member: discord.Member,
+        embed: discord.Embed,
+    ) -> None:
+        channel_id = self.cfg.verify_channel_id
+        if not channel_id:
+            return
+
+        channel = guild.get_channel(channel_id)
+        if channel is None:
+            try:
+                channel = await guild.fetch_channel(channel_id)
+            except (discord.HTTPException, discord.Forbidden, discord.NotFound):
+                return
+
+        if isinstance(channel, discord.TextChannel):
+            try:
+                await channel.send(content=member.mention, embed=embed)
+            except (discord.HTTPException, discord.Forbidden):
+                return
+
     def _is_verify_channel(self, channel_id: Optional[int]) -> bool:
         if not self.cfg.verify_channel_id:
             return True
@@ -359,10 +382,17 @@ class VerifyCog(commands.Cog):
         except discord.HTTPException:
             self.logger.info("Could not DM approval notice to %s", member.id)
 
+        public_notice = embeds.verify_staff_approved_embed(member.mention, highrise_username)
+        await self._send_verify_lane_notice(member.guild, member, public_notice)
+
         if manual:
             return embeds.manual_verify_ready_embed(member.mention, highrise_username)
         if staff_view:
-            return embeds.verify_staff_approved_embed(member.mention, highrise_username)
+            return embeds.verify_staff_action_result_embed(
+                "approved",
+                member.mention,
+                channel_mention=self._verify_channel_mention(),
+            )
         return embeds.verify_success_embed(
             member.mention,
             highrise_username,
@@ -402,7 +432,16 @@ class VerifyCog(commands.Cog):
             await member.send(embed=rejection_embed)
         except discord.HTTPException:
             self.logger.info("Could not DM rejection notice to %s", member.id)
-        return embeds.verify_staff_rejected_embed(member.mention, highrise_username)
+        await self._send_verify_lane_notice(
+            member.guild,
+            member,
+            embeds.verify_rejected_embed(member.mention, highrise_username),
+        )
+        return embeds.verify_staff_action_result_embed(
+            "rejected",
+            member.mention,
+            channel_mention=self._verify_channel_mention(),
+        )
 
     async def _send_verify_prompt_to_context(self, ctx: commands.Context, member: discord.Member) -> None:
         embed = self._build_verify_prompt_embed(member)
@@ -687,7 +726,8 @@ class VerifyCog(commands.Cog):
         if author_blacklist and not self._is_admin(ctx.author):
             await ctx.send(embed=embeds.blacklisted_embed(author_blacklist.get("reason")))
             return
-        await self._send_verify_prompt_to_context(ctx, ctx.author)
+        mention = self._verify_channel_mention() or "the verify lane"
+        await ctx.send(embed=embeds.verify_private_intake_embed(mention), delete_after=20)
 
     @commands.command(name="manualverify")
     async def manual_verify(

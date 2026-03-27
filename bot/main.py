@@ -15,6 +15,7 @@ from bot import embeds
 from bot.config import load_config
 from bot import db
 from bot.utils.command_logging import log_command_event, log_system_event, maybe_publish_patch_note
+from bot.utils.permissions import has_any_role
 from bot.utils.restart_notice import pop_restart_notice
 
 RESTART_EXIT_CODE = 26
@@ -267,6 +268,17 @@ def create_bot(cfg) -> commands.Bot:
     bot.victor_config = cfg
     bot.victor_restart_requested = False
 
+    def _author_can_trigger_intro(message: discord.Message) -> bool:
+        author = message.author
+        if not isinstance(author, discord.Member):
+            return False
+        return has_any_role(author.roles, cfg.roles.get("owner", []))
+
+    def _message_mentions_bot(message: discord.Message) -> bool:
+        if not bot.user:
+            return False
+        return bot.user in message.mentions
+
     @bot.event
     async def on_ready() -> None:
         logging.info("Victor online as %s", bot.user)
@@ -327,7 +339,7 @@ def create_bot(cfg) -> commands.Bot:
         if message.author.bot:
             return
 
-        if bot.user and bot.user in message.mentions and not message.content.strip().startswith(cfg.prefix):
+        if _author_can_trigger_intro(message) and _message_mentions_bot(message) and not message.content.strip().startswith(cfg.prefix):
             verify_channel_mention = f"<#{cfg.verify_channel_id}>" if cfg.verify_channel_id else None
             try:
                 async with message.channel.typing():

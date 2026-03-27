@@ -184,6 +184,22 @@ def verify_staff_rejected_embed(user_mention: str, highrise_username: str) -> di
     return embed
 
 
+def verify_staff_action_result_embed(action: str, user_mention: str, channel_mention: Optional[str] = None) -> discord.Embed:
+    action = action.casefold()
+    if action == "approved":
+        description = "[ STAFF NOTE ]\n\nApproved.\n\nThe user-facing receipt has been posted where they can actually see it."
+        color = COLOR_OK
+    else:
+        description = "[ STAFF NOTE ]\n\nRejected.\n\nThe user-facing receipt has been posted and the file is waiting on a cleaner resubmission."
+        color = COLOR_WARN
+
+    embed = make_embed(TITLE_ADMIN, description, color)
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    if channel_mention:
+        embed.add_field(name="[POSTED IN]", value=channel_mention, inline=True)
+    return embed
+
+
 def verify_prompt_embed(user_mention: str, existing_username: Optional[str] = None) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
@@ -218,6 +234,25 @@ def verify_channel_redirect_embed(channel_mention: str) -> discord.Embed:
     embed.add_field(
         name="[NEXT]",
         value=f"open {channel_mention}, run `verify`, and follow the intake prompt.",
+        inline=False,
+    )
+    return embed
+
+
+def verify_private_intake_embed(channel_mention: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_VERIFY,
+        "[ PRIVATE INTAKE ONLY ]\n\nVictor keeps the actual intake prompt private.\n\nUse `/verify` in the verify lane so your username submission stays off the public floor.",
+        COLOR_WARN,
+    )
+    embed.add_field(
+        name="[WHERE]",
+        value=channel_mention,
+        inline=True,
+    )
+    embed.add_field(
+        name="[NEXT]",
+        value=f"go to {channel_mention} and run `/verify` for the private intake prompt.",
         inline=False,
     )
     return embed
@@ -282,12 +317,12 @@ def verify_current_members_embed(verify_channel_mention: str) -> discord.Embed:
 def victor_intro_embed(user_mention: str, verify_channel_mention: Optional[str] = None) -> discord.Embed:
     embed = make_embed(
         TITLE_HELP,
-        "well. i'm awake.\n\nname's Victor. undead intern. paperwork handler. server-side nuisance with a filing system.",
+        "well. i'm awake.\n\nname's Victor. undead intern. intake clerk. i keep the books clean because apparently no one else can be trusted with a filing system.",
         COLOR_NEUTRAL,
     )
     embed.add_field(name="[TAGGED]", value=user_mention, inline=True)
     embed.add_field(name="[ROLE]", value="Highrise intake + staff-signoff desk", inline=True)
-    embed.add_field(name="[MOOD]", value="clocked in against my will", inline=True)
+    embed.add_field(name="[MOOD]", value="professionally unbothered. still weirdly committed.", inline=True)
     embed.add_field(
         name="[WHAT I HANDLE]",
         value=(
@@ -302,13 +337,13 @@ def victor_intro_embed(user_mention: str, verify_channel_mention: Optional[str] 
             name="[START HERE]",
             value=(
                 f"if your Highrise username is not on file yet, go to {verify_channel_mention} and run `/verify` or `!verify`.\n"
-                "Victor is cleaning house."
+                "yes, i'm asking nicely. don't get used to it."
             ),
             inline=False,
         )
     embed.add_field(
         name="[CURRENT STATE]",
-        value="verify is live, routed to the proper lane, and staff now signs off before anything gets buried in the system.",
+        value="verify is live, routed to the proper lane, and staff now signs off before anything gets buried in the system. cleaner records. fewer embarrassments.",
         inline=False,
     )
     return embed
