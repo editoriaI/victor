@@ -53,5 +53,8 @@
   "welcome_channel_id": 865369205519941663,
   "intro_user_ids": [
     1140126572066652240
+  ],
+  "command_guild_ids": [
+    865367868191014942
   ]
 }

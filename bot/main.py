@@ -362,6 +362,27 @@ def create_bot(cfg) -> commands.Bot:
                     level=logging.ERROR,
                 )
 
+        plain_text = message.content.strip().lower()
+        if plain_text == "/verify":
+            verify_cog = bot.get_cog("VerifyCog")
+            if verify_cog is not None:
+                try:
+                    handled = await verify_cog.handle_plain_text_verify_trigger(message)
+                    if handled:
+                        return
+                except Exception as exc:
+                    await log_command_event(
+                        bot,
+                        cfg,
+                        "fail",
+                        "prefix",
+                        message.author.id,
+                        "verify",
+                        str(message.guild.id) if message.guild else "dm",
+                        details=f"plain_text_verify_fallback_failed: {exc}",
+                        level=logging.ERROR,
+                    )
+
         await bot.process_commands(message)
 
     @bot.event
@@ -387,9 +408,24 @@ def create_bot(cfg) -> commands.Bot:
         await bot.load_extension("bot.cogs.verify")
         await bot.load_extension("bot.cogs.admin")
         await bot.load_extension("bot.cogs.help")
-        synced = await bot.tree.sync()
-        bot.victor_synced_count = len(synced)
-        logging.info("Synced %s application commands", len(synced))
+        synced_count = 0
+        if cfg.command_guild_ids:
+            for guild_id in cfg.command_guild_ids:
+                guild = discord.Object(id=guild_id)
+                bot.tree.copy_global_to(guild=guild)
+            bot.tree.clear_commands(guild=None)
+            cleared = await bot.tree.sync()
+            logging.info("Cleared %s global application commands before guild sync", len(cleared))
+            for guild_id in cfg.command_guild_ids:
+                guild = discord.Object(id=guild_id)
+                synced = await bot.tree.sync(guild=guild)
+                synced_count = max(synced_count, len(synced))
+                logging.info("Synced %s application commands to guild %s", len(synced), guild_id)
+        else:
+            synced = await bot.tree.sync()
+            synced_count = len(synced)
+            logging.info("Synced %s application commands", len(synced))
+        bot.victor_synced_count = synced_count
 
     @bot.tree.error
     async def on_app_command_error(

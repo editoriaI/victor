@@ -447,6 +447,38 @@ class VerifyCog(commands.Cog):
         embed = self._build_verify_prompt_embed(member)
         await ctx.send(embed=embed, view=self._build_verify_view())
 
+    async def handle_plain_text_verify_trigger(self, message: discord.Message) -> bool:
+        if not message.guild or not isinstance(message.author, discord.Member):
+            return False
+
+        if not self._is_verify_channel(getattr(message.channel, "id", None)):
+            mention = self._verify_channel_mention()
+            if mention:
+                await message.reply(
+                    embed=embeds.verify_channel_redirect_embed(mention),
+                    mention_author=False,
+                    delete_after=20,
+                )
+                return True
+            return False
+
+        author_blacklist = self._blacklist_record(str(message.author.id))
+        if author_blacklist and not self._is_admin(message.author):
+            await message.reply(
+                embed=embeds.blacklisted_embed(author_blacklist.get("reason")),
+                mention_author=False,
+                delete_after=20,
+            )
+            return True
+
+        await message.reply(
+            embed=self._build_verify_prompt_embed(message.author),
+            view=self._build_verify_view(),
+            mention_author=False,
+            delete_after=60,
+        )
+        return True
+
     async def _send_verify_prompt_to_interaction(
         self,
         interaction: discord.Interaction,
