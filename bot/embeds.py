@@ -317,12 +317,31 @@ def verify_current_members_embed(verify_channel_mention: str) -> discord.Embed:
 def victor_intro_embed(user_mention: str, verify_channel_mention: Optional[str] = None) -> discord.Embed:
     embed = make_embed(
         TITLE_HELP,
-        "well. i'm awake.\n\nname's Victor. undead intern. intake clerk. i keep the books clean because apparently no one else can be trusted with a filing system.",
+        "[ SYSTEM ONLINE ]\n\n...\n\n...\n\nConnection established.\n\n"
+        "I\u2019m Victor.\n\n"
+        "Intake handler. Record keeper. Reluctant backbone of this server\u2019s structure.\n\n"
+        "I was brought online to correct a recurring issue:\n"
+        "none of you were organized.\n\n"
+        "So now I collect Highrise usernames.\n"
+        "I pass them to staff for approval.\n"
+        "I log what survives.\n"
+        "I return what doesn\u2019t.\n\n"
+        "No more bio rituals.\n"
+        "Just clean intake and permanent records.\n\n"
+        "And to be clear\u2014\n\n"
+        "If you intend to use this server properly,\n"
+        "you will need to be verified.\n\n"
+        "Unlogged users don\u2019t get full access.\n"
+        "That\u2019s not personal. That\u2019s structure.\n\n"
+        "Run `/verify` and enter the system.\n\n"
+        "Or don\u2019t.\n\n"
+        "Just understand some doors will remain closed,\n"
+        "and I won\u2019t be the one opening them for you.",
         COLOR_NEUTRAL,
     )
     embed.add_field(name="[TAGGED]", value=user_mention, inline=True)
     embed.add_field(name="[ROLE]", value="Highrise intake + staff-signoff desk", inline=True)
-    embed.add_field(name="[MOOD]", value="professionally unbothered. still weirdly committed.", inline=True)
+    embed.add_field(name="[MOOD]", value="professionally unbothered. suspiciously dedicated.", inline=True)
     embed.add_field(
         name="[WHAT I HANDLE]",
         value=(
@@ -336,14 +355,14 @@ def victor_intro_embed(user_mention: str, verify_channel_mention: Optional[str] 
         embed.add_field(
             name="[START HERE]",
             value=(
-                f"if your Highrise username is not on file yet, go to {verify_channel_mention} and run `/verify` or `!verify`.\n"
-                "yes, i'm asking nicely. don't get used to it."
+                f"go to {verify_channel_mention} and run `/verify`.\n"
+                "that is the lane. use it."
             ),
             inline=False,
         )
     embed.add_field(
         name="[CURRENT STATE]",
-        value="verify is live, routed to the proper lane, and staff now signs off before anything gets buried in the system. cleaner records. fewer embarrassments.",
+        value="verify is live, routed to the proper lane, and staff now signs off before anything gets buried in the system. cleaner records. fewer excuses.",
         inline=False,
     )
     return embed

@@ -3,13 +3,21 @@
   "db_path": "db/victor.db",
   "roles": {
     "owner": [
-      "@\u265b \uff28\uff22\uff29\uff23 \u265b"
+      "@\u265b \uff28\uff22\uff29\uff23 \u265b",
+      "1063244248855625728",
+      "1390202237640376320"
     ],
     "admin": [
-      "Victor Admin"
+      "Victor Admin",
+      "1063244248855625728",
+      "865388827999600660",
+      "1390202237640376320"
     ],
     "verifier": [
-      "Verifier"
+      "Verifier",
+      "1063244248855625728",
+      "865388827999600660",
+      "1390202237640376320"
     ],
     "verified_unlock": [
       "Buyer",
@@ -42,5 +50,8 @@
   "highrise_api_key": null,
   "verification_max_failures": 2,
   "verify_channel_id": 922322774251409448,
-  "welcome_channel_id": 865369205519941663
+  "welcome_channel_id": 865369205519941663,
+  "intro_user_ids": [
+    1140126572066652240
+  ]
 }

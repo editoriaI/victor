@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -272,7 +273,7 @@ def create_bot(cfg) -> commands.Bot:
         author = message.author
         if not isinstance(author, discord.Member):
             return False
-        return has_any_role(author.roles, cfg.roles.get("owner", []))
+        return author.id in set(cfg.intro_user_ids)
 
     def _message_mentions_bot(message: discord.Message) -> bool:
         if not bot.user:
@@ -348,8 +349,18 @@ def create_bot(cfg) -> commands.Bot:
                     embed=embeds.victor_intro_embed(message.author.mention, verify_channel_mention),
                     mention_author=False,
                 )
-            except (discord.HTTPException, discord.Forbidden):
-                pass
+            except Exception as exc:
+                await log_command_event(
+                    bot,
+                    cfg,
+                    "fail",
+                    "prefix",
+                    message.author.id,
+                    "unknown",
+                    str(message.guild.id) if message.guild else "dm",
+                    details=f"victor_intro_failed: {exc}",
+                    level=logging.ERROR,
+                )
 
         await bot.process_commands(message)
 
