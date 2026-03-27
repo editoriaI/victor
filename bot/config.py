@@ -33,6 +33,7 @@ def _default_roles() -> Dict[str, List[str]]:
     return {
         "owner": [OWNER_ROLE_NAME],
         "admin": ["Victor Admin"],
+        "founder": ["Founder"],
         "verifier": ["Verifier"],
         "verified_unlock": ["Buyer", "Seller", "Blackmarket"],
         "blackmarket": ["Blackmarket"],

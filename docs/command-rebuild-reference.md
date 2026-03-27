@@ -45,3 +45,8 @@ This file tracks the command set that is still parked while Victor comes back on
 - `bot/cogs/verify.py` is live again, including `verify`, `manualverify`, and `status`.
 - `bot/cogs/help.py` is live again, including a `menu` command that opens a button-driven command board inside Discord.
 - `bot/cogs/staff_console.py` keeps operational crash-thread tooling, and verify review threads now reconnect to the live verify handlers.
+
+## Announcements
+
+- `!verify` now opens the intake prompt and quietly deletes the member message after submission so the channel stays tidy; staff decisions self-destruct once they finish.
+- Verified members who carry the admin, owner, or founder cloth now get a quick installation recognition badge in their success note so the whole desk knows it was a VIP file.

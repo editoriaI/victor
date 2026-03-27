@@ -101,6 +101,7 @@ def verify_success_embed(
     unlocked_roles: Optional[List[str]] = None,
     manual: bool = False,
     captured: bool = False,
+    recognition_note: Optional[str] = None,
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
@@ -121,6 +122,8 @@ def verify_success_embed(
         notes.append("Nickname updated to the Highrise username.")
     if unlocked_roles:
         notes.append(f"Unlocked roles: {', '.join(unlocked_roles)}")
+    if recognition_note:
+        notes.append(recognition_note)
     embed.add_field(name="[THREAD]", value="thread closed. system remains stable. barely.", inline=False)
     embed.add_field(name="[NOTES]", value="\n".join(f"- {note}" for note in notes), inline=False)
     return embed

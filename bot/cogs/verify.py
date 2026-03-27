@@ -8,6 +8,7 @@ from bot import db
 from bot import embeds
 from bot.cogs.staff_console import send_verify_intake_review_post
 from bot.config import Config
+from bot.utils.command_logging import log_command_event
 from bot.utils.permissions import has_any_role, normalize_role_name
 
 VERIFY_BEGIN_BUTTON_ID = "victor:verify_begin"
@@ -35,6 +36,13 @@ class VerifyIntakeModal(discord.ui.Modal):
             str(self.highrise_username),
         )
 
+    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
+        await self.cog.handle_verify_component_error(
+            interaction,
+            error,
+            stage="verify_modal",
+        )
+
 
 class VerifyBeginView(discord.ui.View):
     def __init__(self, cog: "VerifyCog") -> None:
@@ -49,6 +57,18 @@ class VerifyBeginView(discord.ui.View):
     )
     async def begin_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self.cog.handle_verify_begin_button(interaction)
+
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        item: discord.ui.Item,
+    ) -> None:
+        await self.cog.handle_verify_component_error(
+            interaction,
+            error,
+            stage=f"verify_begin_button:{item.custom_id or 'unknown'}",
+        )
 
 
 class VerifyCog(commands.Cog):
@@ -152,6 +172,11 @@ class VerifyCog(commands.Cog):
             return
         await interaction.response.send_message(**kwargs)
 
+    async def _defer_interaction(self, interaction: discord.Interaction, *, ephemeral: bool = True) -> None:
+        if interaction.response.is_done():
+            return
+        await interaction.response.defer(ephemeral=ephemeral)
+
     def _find_role(self, guild: discord.Guild, role_name: str) -> Optional[discord.Role]:
         target = normalize_role_name(role_name)
         for role in guild.roles:
@@ -177,14 +202,21 @@ class VerifyCog(commands.Cog):
             except discord.Forbidden:
                 self.logger.warning("Could not add verified unlock roles to %s", member.id)
 
-        if member.nick != highrise_username:
-            try:
-                await member.edit(nick=highrise_username, reason="Victor verify intake complete")
-                nickname_changed = True
-            except discord.Forbidden:
-                self.logger.warning("Could not update nickname for %s", member.id)
-
         return nickname_changed, unlocked_roles
+
+    def _special_role_note(self, member: discord.Member) -> Optional[str]:
+        for key, label in (("founder", "Founder"), ("owner", "Owner"), ("admin", "Admin")):
+            roles = self.cfg.roles.get(key, [])
+            if roles and self._has_any_role(member, roles):
+                return f"Quick install recognition: {label} status noted on this intake."
+        return None
+    async def _delete_message_safely(self, message: Optional[discord.Message]) -> None:
+        if message is None:
+            return
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            self.logger.debug("Could not delete intake message %s", getattr(message, "id", "unknown"))
 
     def _status_payload(self, target: discord.Member) -> Optional[dict]:
         conn = db.get_connection(self.cfg.db_path)
@@ -241,6 +273,42 @@ class VerifyCog(commands.Cog):
     def _build_verify_view(self) -> VerifyBeginView:
         return VerifyBeginView(self)
 
+    async def _log_verify_runtime_error(
+        self,
+        interaction: discord.Interaction,
+        *,
+        stage: str,
+        error: Exception,
+    ) -> None:
+        user_id = getattr(interaction.user, "id", 0)
+        location = str(interaction.guild.id) if interaction.guild else "dm"
+        await log_command_event(
+            self.bot,
+            self.cfg,
+            "fail",
+            "prefix",
+            user_id,
+            "verify",
+            location,
+            details=f"{stage}: {type(error).__name__}: {error}",
+            level=logging.ERROR,
+            publish_to_channel=False,
+        )
+
+    async def handle_verify_component_error(
+        self,
+        interaction: discord.Interaction,
+        error: Exception,
+        *,
+        stage: str,
+    ) -> None:
+        self.logger.exception("Verify intake interaction failed during %s", stage, exc_info=error)
+        await self._log_verify_runtime_error(interaction, stage=stage, error=error)
+        try:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed(), ephemeral=True)
+        except discord.HTTPException:
+            return
+
     def _embed_field_value(self, embed: discord.Embed, field_name: str) -> Optional[str]:
         for field in embed.fields:
             if field.name == field_name:
@@ -262,6 +330,30 @@ class VerifyCog(commands.Cog):
         if not value or any(char.isspace() for char in value):
             return None
         return value
+
+    async def _resolve_target_member(
+        self,
+        interaction: discord.Interaction,
+        actor: discord.Member,
+        *,
+        allow_actor_fallback: bool = False,
+    ) -> Optional[discord.Member]:
+        target_member_id: Optional[int] = None
+        if interaction.message and interaction.message.embeds:
+            target_member_id = self._extract_target_member_id(interaction.message.embeds[0])
+
+        if not target_member_id:
+            if allow_actor_fallback and not self._can_manage_verification(actor):
+                return actor
+            return None
+
+        target = interaction.guild.get_member(target_member_id) if interaction.guild else None
+        if target is None and interaction.guild is not None:
+            try:
+                target = await interaction.guild.fetch_member(target_member_id)
+            except discord.HTTPException:
+                return None
+        return target
 
     def _existing_username(self, member: discord.Member) -> Optional[str]:
         payload = self._status_payload(member)
@@ -374,6 +466,7 @@ class VerifyCog(commands.Cog):
             conn.close()
 
         nickname_changed, unlocked_roles = await self._apply_verified_access(member, highrise_username)
+        recognition_note = self._special_role_note(member)
 
         approval_notice = embeds.approval_dm_embed(highrise_username)
         try:
@@ -399,6 +492,7 @@ class VerifyCog(commands.Cog):
             unlocked_roles=unlocked_roles,
             manual=manual,
             captured=not manual,
+            recognition_note=recognition_note,
         )
 
     async def _reject_highrise_username(
@@ -489,7 +583,7 @@ class VerifyCog(commands.Cog):
         await self._send_interaction_embed(interaction, embed, ephemeral=ephemeral, view=self._build_verify_view())
 
     async def handle_verify_begin_button(self, interaction: discord.Interaction) -> None:
-        if not interaction.guild or not interaction.message or not interaction.message.embeds:
+        if not interaction.guild:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
             return
 
@@ -498,18 +592,13 @@ class VerifyCog(commands.Cog):
             await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
             return
 
-        target_member_id = self._extract_target_member_id(interaction.message.embeds[0])
-        if not target_member_id:
-            await self._send_interaction_embed(interaction, embeds.system_error_embed())
-            return
-
-        target = interaction.guild.get_member(target_member_id)
+        target = await self._resolve_target_member(interaction, actor, allow_actor_fallback=True)
         if target is None:
-            try:
-                target = await interaction.guild.fetch_member(target_member_id)
-            except discord.HTTPException:
-                await self._send_interaction_embed(interaction, embeds.not_found_embed(str(target_member_id)))
-                return
+            await self._send_interaction_embed(
+                interaction,
+                embeds.invalid_usage_embed("Run `!verify` again to open a fresh intake prompt, then press `Open Intake` there."),
+            )
+            return
 
         if actor.id != target.id and not self._can_manage_verification(actor):
             await self._send_interaction_embed(
@@ -523,13 +612,16 @@ class VerifyCog(commands.Cog):
             await self._send_interaction_embed(interaction, embeds.blacklisted_embed(author_blacklist.get("reason")))
             return
 
-        await interaction.response.send_modal(
-            VerifyIntakeModal(
-                self,
-                target.id,
-                existing_username=self._existing_username(target),
+        try:
+            await interaction.response.send_modal(
+                VerifyIntakeModal(
+                    self,
+                    target.id,
+                    existing_username=self._existing_username(target),
+                )
             )
-        )
+        except Exception as exc:
+            await self.handle_verify_component_error(interaction, exc, stage="verify_begin_button:send_modal")
 
     async def handle_verify_modal_submit(
         self,
@@ -545,6 +637,8 @@ class VerifyCog(commands.Cog):
         if not isinstance(actor, discord.Member):
             await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
             return
+
+        await self._defer_interaction(interaction, ephemeral=True)
 
         target = interaction.guild.get_member(target_member_id)
         if target is None:
@@ -574,13 +668,19 @@ class VerifyCog(commands.Cog):
             )
             return
 
-        embed = await self._queue_highrise_username_submission(
-            str(actor.id),
-            target,
-            username,
-            source="intake_modal",
-        )
+        try:
+            embed = await self._queue_highrise_username_submission(
+                str(actor.id),
+                target,
+                username,
+                source="intake_modal",
+            )
+        except Exception as exc:
+            await self.handle_verify_component_error(interaction, exc, stage="verify_modal:queue_submission")
+            return
+
         await self._send_interaction_embed(interaction, embed, ephemeral=True)
+        await self._delete_message_safely(interaction.message)
 
     async def handle_menu_verify_button(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
@@ -626,6 +726,8 @@ class VerifyCog(commands.Cog):
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
             return
 
+        await self._defer_interaction(interaction, ephemeral=True)
+
         target = interaction.guild.get_member(member_id)
         if target is None:
             try:
@@ -669,6 +771,8 @@ class VerifyCog(commands.Cog):
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
             return
 
+        await self._defer_interaction(interaction, ephemeral=True)
+
         target = interaction.guild.get_member(member_id)
         if target is None:
             try:
@@ -686,6 +790,7 @@ class VerifyCog(commands.Cog):
             staff_view=True,
         )
         await self._send_interaction_embed(interaction, result)
+        await self._delete_message_safely(interaction.message)
 
     async def handle_console_reject_username_button(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not interaction.message or not interaction.message.embeds:
@@ -704,6 +809,8 @@ class VerifyCog(commands.Cog):
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
             return
 
+        await self._defer_interaction(interaction, ephemeral=True)
+
         target = interaction.guild.get_member(member_id)
         if target is None:
             try:
@@ -719,6 +826,7 @@ class VerifyCog(commands.Cog):
             source="staff_console_reject",
         )
         await self._send_interaction_embed(interaction, result)
+        await self._delete_message_safely(interaction.message)
 
     async def handle_console_status_button(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not interaction.message or not interaction.message.embeds:
@@ -734,6 +842,8 @@ class VerifyCog(commands.Cog):
         if not member_id:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
             return
+
+        await self._defer_interaction(interaction, ephemeral=True)
 
         target = interaction.guild.get_member(member_id)
         if target is None:
