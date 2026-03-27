@@ -405,21 +405,21 @@ def match_declined_embed(match_id: int) -> discord.Embed:
 def help_embed() -> discord.Embed:
     embed = make_embed(
         TITLE_HELP,
-        "Pick a path from the menu. Do not get sentimental.",
+        "pick a live thread from the menu. the rest are still backstage.",
         COLOR_NEUTRAL,
     )
-    embed.add_field(name="[VERIFY]", value="!verify, !status", inline=True)
-    embed.add_field(name="[MARKET]", value="!blackmarket, !help blackmarket", inline=True)
-    embed.add_field(name="[MATCH]", value="!request, !accept, !decline", inline=True)
-    embed.add_field(name="[ADMIN]", value="!blacklist, !sync, !restart, !manualverify", inline=False)
+    embed.add_field(name="[MENU]", value="!menu, /menu", inline=True)
+    embed.add_field(name="[VERIFY]", value="!verify, !manualverify, !status", inline=True)
+    embed.add_field(name="[ADMIN]", value="!sync, /sync", inline=True)
+    embed.add_field(name="[PARKED]", value="blackmarket, matchmaking, restart", inline=True)
     embed.add_field(
         name="[VERIFY FLOW]",
-        value="`!verify @user username` checks Highrise and issues a code. After the user updates their Highrise bio, they press the confirmation button on Victor's message so he can re-check it. `!manualverify` is the staff fallback.",
+        value="`!verify @user username` opens the ritual, issues a code, and lets the user recheck from the button. `!manualverify` is the staff fallback once a case hits review.",
         inline=False,
     )
     embed.add_field(
         name="[DEEP HELP]",
-        value="!help verify | !help sync | !help request | /help verify",
+        value="!menu | !help verify | !help status | !help sync | !help parked",
         inline=False,
     )
     embed.add_field(name="[MENU]", value="Use the select menu or the quick buttons below.", inline=False)

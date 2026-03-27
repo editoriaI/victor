@@ -307,11 +307,12 @@ def create_bot(cfg) -> commands.Bot:
 
     @bot.event
     async def setup_hook() -> None:
-        # Bring verify back online while the rest of the broader command set stays parked.
+        # Bring verify and help back online while the rest of the broader command set stays parked.
         await bot.load_extension("bot.cogs.staff_console")
         await bot.load_extension("bot.cogs.monitor")
         await bot.load_extension("bot.cogs.verify")
         await bot.load_extension("bot.cogs.admin")
+        await bot.load_extension("bot.cogs.help")
         synced = await bot.tree.sync()
         bot.victor_synced_count = len(synced)
         logging.info("Synced %s application commands", len(synced))

@@ -4,16 +4,15 @@ This file tracks the command set that is still parked while Victor comes back on
 
 ## Active Runtime
 
-- Loaded cogs: `bot.cogs.staff_console`, `bot.cogs.monitor`, `bot.cogs.verify`, `bot.cogs.admin`
-- Active text commands: `!verify`, `!manualverify`, `!status`, `!sync`
-- Active slash commands: `/verify`, `/manualverify`, `/status`, `/sync`
+- Loaded cogs: `bot.cogs.staff_console`, `bot.cogs.monitor`, `bot.cogs.verify`, `bot.cogs.admin`, `bot.cogs.help`
+- Active text commands: `!menu`, `!help`, `!verify`, `!manualverify`, `!status`, `!sync`
+- Active slash commands: `/menu`, `/help`, `/verify`, `/manualverify`, `/status`, `/sync`
 - Source of truth for staged runtime loading: `bot/main.py`
 
 ## Parked Cogs
 
 - `bot/cogs/blackmarket.py`
 - `bot/cogs/matchmaking.py`
-- `bot/cogs/help.py`
 
 ## Parked Text Commands
 
@@ -28,11 +27,6 @@ This file tracks the command set that is still parked while Victor comes back on
 - `!blacklist remove @user`
 - `!blacklist list`
 - `!restart`
-- `!help`
-- `!help verify`
-- `!help blackmarket`
-- `!help matchmaking`
-- `!help admin`
 
 ## Parked Slash Commands
 
@@ -44,10 +38,10 @@ This file tracks the command set that is still parked while Victor comes back on
 - `/accept match_id`
 - `/decline match_id`
 - `/restart`
-- `/help [feature]`
 
 ## Rebuild Notes
 
 - The parked command implementations are still present in the parked cog files above.
 - `bot/cogs/verify.py` is live again, including `verify`, `manualverify`, and `status`.
+- `bot/cogs/help.py` is live again, including a `menu` command that opens a button-driven command board inside Discord.
 - `bot/cogs/staff_console.py` keeps operational crash-thread tooling, and verify review threads now reconnect to the live verify handlers.
