@@ -2,7 +2,6 @@ import logging
 from typing import List, Optional
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from bot import db
@@ -758,8 +757,7 @@ class VerifyCog(commands.Cog):
         if author_blacklist and not self._is_admin(ctx.author):
             await ctx.send(embed=embeds.blacklisted_embed(author_blacklist.get("reason")))
             return
-        mention = self._verify_channel_mention() or "the verify lane"
-        await ctx.send(embed=embeds.verify_private_intake_embed(mention), delete_after=20)
+        await self._send_verify_prompt_to_context(ctx, ctx.author)
 
     @commands.command(name="manualverify")
     async def manual_verify(
@@ -809,87 +807,6 @@ class VerifyCog(commands.Cog):
             await ctx.send(embed=embeds.verify_missing_record_embed(target.mention))
             return
         await ctx.send(embed=self._build_status_embed(target, payload))
-
-    @app_commands.command(name="verify", description="Open Victor's Highrise username intake.")
-    @app_commands.guild_only()
-    async def verify_slash(self, interaction: discord.Interaction) -> None:
-        if await self._redirect_to_verify_channel_for_interaction(interaction):
-            return
-        author = interaction.user
-        if not isinstance(author, discord.Member):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
-            return
-
-        author_blacklist = self._blacklist_record(str(author.id))
-        if author_blacklist and not self._is_admin(author):
-            await self._send_interaction_embed(interaction, embeds.blacklisted_embed(author_blacklist.get("reason")))
-            return
-
-        await self._send_verify_prompt_to_interaction(interaction, author, ephemeral=True)
-
-    @app_commands.command(name="manualverify", description="Manually store or correct a member's Highrise username.")
-    @app_commands.describe(member="Discord member to update", highrise_username="Highrise username to store")
-    @app_commands.guild_only()
-    async def manual_verify_slash(
-        self,
-        interaction: discord.Interaction,
-        member: discord.Member,
-        highrise_username: Optional[str] = None,
-    ) -> None:
-        if await self._redirect_to_verify_channel_for_interaction(interaction):
-            return
-        author = interaction.user
-        if not isinstance(author, discord.Member):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
-            return
-        if not self._can_manage_verification(author):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
-            return
-
-        username = self._normalize_highrise_username(highrise_username or self._existing_username(member) or "")
-        if not username:
-            await self._send_interaction_embed(
-                interaction,
-                embeds.invalid_usage_embed("/manualverify member highrise_username"),
-            )
-            return
-
-        embed = await self._approve_highrise_username(
-            str(author.id),
-            member,
-            username,
-            source="manual_slash",
-            manual=True,
-        )
-        await self._send_interaction_embed(interaction, embed)
-
-    @app_commands.command(name="status", description="Check the Highrise username Victor has on file.")
-    @app_commands.describe(member="Optional member to look up")
-    @app_commands.guild_only()
-    async def status_slash(self, interaction: discord.Interaction, member: Optional[discord.Member] = None) -> None:
-        if await self._redirect_to_verify_channel_for_interaction(interaction):
-            return
-        author = interaction.user
-        if not isinstance(author, discord.Member):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
-            return
-
-        target = member or author
-        if member and member != author and not self._can_view_others(author):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
-            return
-
-        author_blacklist = self._blacklist_record(str(author.id))
-        if author_blacklist and not self._is_admin(author):
-            await self._send_interaction_embed(interaction, embeds.blacklisted_embed(author_blacklist.get("reason")))
-            return
-
-        payload = self._status_payload(target)
-        if not payload:
-            await self._send_interaction_embed(interaction, embeds.verify_missing_record_embed(target.mention))
-            return
-        await self._send_interaction_embed(interaction, self._build_status_embed(target, payload))
-
 
 async def setup(bot: commands.Bot) -> None:
     cfg = bot.victor_config
