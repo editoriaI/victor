@@ -18,7 +18,7 @@ HELP_OPTIONS = (
 def build_menu_embed() -> discord.Embed:
     embed = embeds.make_embed(
         f"{embeds.TITLE_HELP} // MENU",
-        "command board loaded. tap a lane below and victor will either launch the flow or open the exact panel you need.",
+        "Command board online. Press a lane and Victor executes the associated flow (or explains how staff can finish the lane).",
         embeds.COLOR_NEUTRAL,
     )
     embed.add_field(name="[LIVE TEXT]", value="!menu\n!help\n!verify\n!manualverify\n!status\n!sync\n!autoverify (staff only)", inline=False)
@@ -298,7 +298,14 @@ class MenuView(discord.ui.View):
 
     @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary, emoji="📎")
     async def manual_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_panel(interaction, "manualverify")
+        await interaction.response.send_message(
+            embed=embeds.make_embed(
+                f"{embeds.TITLE_HELP} // MANUAL",
+                "Manual verify lets staff correct a username directly. Run `!manualverify @user username` in the verify lane when automated checks stall.",
+                embeds.COLOR_NEUTRAL,
+            ),
+            ephemeral=True,
+        )
 
     @discord.ui.button(label="Sync", style=discord.ButtonStyle.secondary, emoji="📟")
     async def sync_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
