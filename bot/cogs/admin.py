@@ -32,6 +32,11 @@ class AdminCog(commands.Cog):
             return
         await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
 
+    async def _defer_interaction(self, interaction: discord.Interaction, *, ephemeral: bool = True) -> None:
+        if interaction.response.is_done():
+            return
+        await interaction.response.defer(ephemeral=ephemeral)
+
     async def _run_sync_action(self) -> discord.Embed:
         synced = await self.bot.tree.sync()
         return embeds.sync_success_embed(len(synced))
@@ -41,6 +46,7 @@ class AdminCog(commands.Cog):
         if not isinstance(author, discord.Member) or not self._is_admin(author):
             await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Victor Admin"))
             return
+        await self._defer_interaction(interaction, ephemeral=True)
         embed = await self._run_sync_action()
         await self._send_interaction_embed(interaction, embed)
 

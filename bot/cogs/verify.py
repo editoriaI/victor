@@ -859,6 +859,34 @@ class VerifyCog(commands.Cog):
             return
         await self._send_interaction_embed(interaction, self._build_status_embed(target, payload))
 
+    @commands.command(name="autoverify")
+    async def auto_verify(
+        self,
+        ctx: commands.Context,
+        member: discord.Member,
+        *,
+        highrise_username: Optional[str] = None,
+    ) -> None:
+        if not self._can_manage_verification(ctx.author):
+            await ctx.send(embed=embeds.permission_denied_embed("Verifier"))
+            return
+
+        username_text = self._normalize_highrise_username(highrise_username or self._existing_username(member) or "")
+        if not username_text:
+            await ctx.send(
+                embed=embeds.invalid_usage_embed("!autoverify @user username"),
+            )
+            return
+
+        embed = await self._approve_highrise_username(
+            str(ctx.author.id),
+            member,
+            username_text,
+            source="autoverify_command",
+            manual=True,
+        )
+        await ctx.send(embed=embed)
+
     @commands.command(name="verify")
     async def verify(self, ctx: commands.Context) -> None:
         if await self._redirect_to_verify_channel_for_context(ctx):

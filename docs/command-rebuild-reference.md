@@ -44,6 +44,7 @@ This file tracks the command set that is still parked while Victor comes back on
 - The parked command implementations are still present in the parked cog files above.
 - `bot/cogs/verify.py` is live again, including `verify`, `manualverify`, and `status`.
 - `bot/cogs/help.py` is live again, including a `menu` command that opens a button-driven command board inside Discord.
+- Added `!autoverify @member username` so staff can instantly approve a username without navigating the modal flow (still limited to verifier/admin/owner).
 - `bot/cogs/staff_console.py` keeps operational crash-thread tooling, and verify review threads now reconnect to the live verify handlers.
 
 ## Announcements
