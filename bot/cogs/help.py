@@ -21,7 +21,7 @@ def build_menu_embed() -> discord.Embed:
         "command board loaded. tap a lane below and victor will either launch the flow or open the exact panel you need.",
         embeds.COLOR_NEUTRAL,
     )
-    embed.add_field(name="[LIVE TEXT]", value="!menu\n!help\n!verify\n!manualverify\n!status\n!sync", inline=False)
+    embed.add_field(name="[LIVE TEXT]", value="!menu\n!help\n!verify\n!manualverify\n!status\n!sync\n!autoverify (staff only)", inline=False)
     embed.add_field(
         name="[HOW THIS BOARD WORKS]",
         value=(
