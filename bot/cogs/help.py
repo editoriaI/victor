@@ -273,37 +273,28 @@ class HelpView(discord.ui.View):
 
 
 class MenuView(discord.ui.View):
-    def __init__(self, topic_builder: Callable[[Optional[str]], discord.Embed]) -> None:
+    def __init__(self, topic_builder: Callable[[Optional[str]], discord.Embed], cfg: Config) -> None:
         super().__init__(timeout=180)
         self.topic_builder = topic_builder
+        self.cfg = cfg
+        self.verify_channel = (
+            f"<#{cfg.verify_channel_id}>" if cfg.verify_channel_id else "the verify lane"
+        )
 
-    async def _send_panel(self, interaction: discord.Interaction, topic: str) -> None:
-        await interaction.response.send_message(embed=self.topic_builder(topic), ephemeral=True)
-
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.secondary, emoji="🕯️")
+    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, emoji="🛡️")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        verify_cog = interaction.client.get_cog("VerifyCog")
-        if verify_cog is None:
-            await interaction.response.send_message("Victor misplaced the intake clipboard.", ephemeral=True)
-            return
-        await verify_cog.handle_menu_verify_button(interaction)
-
-    @discord.ui.button(label="Status", style=discord.ButtonStyle.secondary, emoji="🖤")
-    async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        verify_cog = interaction.client.get_cog("VerifyCog")
-        if verify_cog is None:
-            await interaction.response.send_message("Victor misplaced the file drawer.", ephemeral=True)
-            return
-        await verify_cog.handle_menu_status_button(interaction)
-
-    @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary, emoji="📎")
-    async def manual_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        embed = embeds.make_embed(
+            f"{embeds.TITLE_HELP} // VERIFY MENU",
+            "Pick how you want to work around the verify lane.",
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(name="[INTAKE]", value="`!verify`", inline=False)
+        embed.add_field(name="[STATUS]", value="`!status` / `!status @user`", inline=False)
+        embed.add_field(name="[AUTO]", value="`!autoverify on|off`", inline=False)
+        embed.add_field(name="[LANE]", value=self.verify_channel, inline=False)
         await interaction.response.send_message(
-            embed=embeds.make_embed(
-                f"{embeds.TITLE_HELP} // MANUAL",
-                "Manual verify lets staff correct a username directly. Run `!manualverify @user username` in the verify lane when automated checks stall.",
-                embeds.COLOR_NEUTRAL,
-            ),
+            embed=embed,
+            view=VerifySubMenu(self.verify_channel),
             ephemeral=True,
         )
 
@@ -317,7 +308,52 @@ class MenuView(discord.ui.View):
 
     @discord.ui.button(label="Parked", style=discord.ButtonStyle.secondary, emoji="🦇")
     async def parked_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_panel(interaction, "parked")
+        embed = embeds.make_embed(
+            f"{embeds.TITLE_HELP} // PARKED",
+            "The following commands are still parked until those lanes return.",
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(
+            name="[PARKED TEXT]",
+            value=(
+                "`!blackmarket list [query]`\n"
+                "`!blackmarket add \"item\" price`\n"
+                "`!blackmarket remove <listing_id>`\n"
+                "`!request \"item\" max_price`\n"
+                "`!cancel <request_id>`\n"
+                "`!accept <match_id>`\n"
+                "`!decline <match_id>`"
+            ),
+            inline=False,
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+class VerifySubMenu(discord.ui.View):
+    def __init__(self, verify_channel: str):
+        super().__init__(timeout=180)
+        self.verify_channel = verify_channel or "the verify lane"
+
+    @discord.ui.button(label="Run Verify", style=discord.ButtonStyle.success, emoji="🛠️")
+    async def run_verify(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            f"Go to {self.verify_channel} and run `!verify` to open the intake prompt.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Check Status", style=discord.ButtonStyle.secondary, emoji="🕵️")
+    async def check_status(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            f"Use `!status` or `!status @user` in {self.verify_channel} to inspect a thread.",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(label="Auto Verify", style=discord.ButtonStyle.secondary, emoji="⚙️")
+    async def auto_verify(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await interaction.response.send_message(
+            "Toggle auto-approval with `!autoverify on` or `!autoverify off`.",
+            ephemeral=True,
+        )
 
 
 class HelpCog(commands.Cog):
@@ -339,7 +375,7 @@ class HelpCog(commands.Cog):
 
     @commands.command(name="menu")
     async def menu_command(self, ctx: commands.Context) -> None:
-        await ctx.send(embed=self._menu_embed(), view=MenuView(self._topic_embed))
+        await ctx.send(embed=self._menu_embed(), view=MenuView(self._topic_embed, self.cfg))
 
 async def setup(bot: commands.Bot) -> None:
     cfg = bot.victor_config

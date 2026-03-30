@@ -59,6 +59,22 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
     conn.execute(
         "UPDATE verification_codes SET highrise_username = '' WHERE highrise_username IS NULL"
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS command_watch (
+          channel_id INTEGER PRIMARY KEY,
+          last_message_id INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS feature_flags (
+          name TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+        """
+    )
 
 
 def upsert_user(
@@ -426,6 +442,40 @@ def list_matches_for_seller(conn: sqlite3.Connection, seller_id: str, status: Op
     else:
         rows = conn.execute("SELECT * FROM matches WHERE seller_id = ?", (seller_id,)).fetchall()
     return [dict(row) for row in rows]
+
+
+def fetch_command_watch_last(conn: sqlite3.Connection, channel_id: int) -> int:
+    row = conn.execute("SELECT last_message_id FROM command_watch WHERE channel_id = ?", (channel_id,)).fetchone()
+    return int(row["last_message_id"]) if row else 0
+
+
+def upsert_command_watch_last(conn: sqlite3.Connection, channel_id: int, last_message_id: int) -> None:
+  conn.execute(
+        """
+        INSERT INTO command_watch (channel_id, last_message_id)
+        VALUES (?, ?)
+        ON CONFLICT(channel_id) DO UPDATE SET
+          last_message_id = excluded.last_message_id
+        """,
+      (channel_id, last_message_id),
+    )
+
+
+def get_feature_flag(conn: sqlite3.Connection, name: str, default: str = "0") -> str:
+    row = conn.execute("SELECT value FROM feature_flags WHERE name = ?", (name,)).fetchone()
+    return str(row["value"]) if row else default
+
+
+def set_feature_flag(conn: sqlite3.Connection, name: str, value: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO feature_flags (name, value)
+        VALUES (?, ?)
+        ON CONFLICT(name) DO UPDATE SET
+          value = excluded.value
+        """,
+        (name, value),
+    )
 
 
 def close_matches_for_request(conn: sqlite3.Connection, request_id: int, exclude_match_id: Optional[int] = None) -> None:

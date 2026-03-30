@@ -82,3 +82,13 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   details TEXT,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS command_watch (
+  channel_id INTEGER PRIMARY KEY,
+  last_message_id INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS feature_flags (
+  name TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);

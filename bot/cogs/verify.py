@@ -8,10 +8,11 @@ from bot import db
 from bot import embeds
 from bot.cogs.staff_console import send_verify_intake_review_post
 from bot.config import Config
-from bot.utils.command_logging import log_command_event
+from bot.utils.command_logging import log_command_event, log_system_event
 from bot.utils.permissions import has_any_role, normalize_role_name
 
 VERIFY_BEGIN_BUTTON_ID = "victor:verify_begin"
+AUTO_VERIFY_FLAG = "autoverify"
 
 
 class VerifyIntakeModal(discord.ui.Modal):
@@ -107,6 +108,13 @@ class VerifyCog(commands.Cog):
         if not self.cfg.verify_channel_id:
             return None
         return f"<#{self.cfg.verify_channel_id}>"
+
+    def _auto_verify_enabled(self) -> bool:
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            return db.get_feature_flag(conn, AUTO_VERIFY_FLAG, "0") == "1"
+        finally:
+            conn.close()
 
     async def _send_verify_lane_notice(
         self,
@@ -402,6 +410,21 @@ class VerifyCog(commands.Cog):
             conn.commit()
         finally:
             conn.close()
+
+        if self._auto_verify_enabled():
+            embed = await self._approve_highrise_username(
+                actor_id,
+                member,
+                highrise_username,
+                source="auto_verify",
+            )
+            await log_system_event(
+                self.bot,
+                self.cfg,
+                "Auto Verify",
+                details=f"member={member.id} highrise={highrise_username}",
+            )
+            return embed
 
         await send_verify_intake_review_post(
             self.bot,

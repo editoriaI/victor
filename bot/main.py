@@ -16,6 +16,8 @@ from bot import embeds
 from bot.config import load_config
 from bot import db
 from bot.utils.command_logging import log_command_event, log_system_event, maybe_publish_patch_note
+from bot.utils.auto_sync import maybe_auto_sync
+from bot.utils.command_replay import scan_missed_commands
 from bot.utils.permissions import has_any_role
 from bot.utils.restart_notice import pop_restart_notice
 
@@ -302,6 +304,8 @@ def create_bot(cfg) -> commands.Bot:
                     f"surface={restart_notice.get('surface')}"
                 ),
             )
+        await scan_missed_commands(bot, cfg)
+        await maybe_auto_sync(bot, cfg)
         await maybe_publish_patch_note(bot, cfg)
 
     @bot.event
