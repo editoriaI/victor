@@ -4,16 +4,35 @@ import discord
 from discord.ext import commands
 
 from bot import embeds
+from bot.config import Config
 
 HELP_OPTIONS = (
     ("verify", "🕯️ Verify", "Open intake and send the username to staff approval"),
     ("status", "🖤 Status", "Check where a verification thread currently stands"),
     ("manualverify", "📎 Manual Verify", "Finish a review case after the automated checks stall"),
     ("sync", "📟 Sync", "Refresh Victor's command registry"),
+    ("autoverifymode", "🚚 Auto Verify", "Toggle Victor's auto-approval lane for intake threads"),
     ("parked", "🦇 Parked", "Features still waiting to come back online"),
 )
 
 
+
+
+
+
+
+def build_menu_embed(cfg: Config) -> discord.Embed:
+    verify_lane = f"<#{cfg.verify_channel_id}>" if cfg.verify_channel_id else "the hr-id lane"
+    embed = embeds.make_embed(
+        f"{embeds.TITLE_HELP} // MENU",
+        "Victor's live lanes are listed below. Tap a button to get the matching lane details instantly.",
+        embeds.COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[LIVE COMMANDS]", value="`!verify`, `!status`, `!manualverify`, `!sync`, `!autoverifymode on|off`", inline=False)
+    embed.add_field(name="[VERIFY LANE]", value=f"Run intake and status checks inside {verify_lane}.", inline=False)
+    embed.add_field(name="[AUTO MODE]", value="`!autoverifymode on` lets Victor auto-approve, `off` keeps staff in the loop.", inline=False)
+    embed.add_field(name="[NAVIGATION]", value="Use the buttons to drop straight into a topic without typing.", inline=False)
+    return embed
 
 
 def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
@@ -37,6 +56,8 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         "cancelrequest": "parked",
         "blackmarket": "parked",
         "matchmaking": "parked",
+        "autoverify": "autoverifymode",
+        "autoverifymode": "autoverifymode",
     }
     topic = aliases.get(topic, topic)
 
@@ -124,6 +145,25 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         embed.add_field(
             name="[NOTES]",
             value="Victor Admin only. this does not re-enable parked features by itself.",
+            inline=False,
+        )
+        return embed
+
+    if topic == "autoverifymode":
+        embed = embeds.make_embed(
+            f"{embeds.TITLE_HELP} // AUTO VERIFY",
+            "autoverifymode lets admins toggle Victor's auto-approval logic for new intake threads.",
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(name="[TEXT]", value="!autoverifymode on|off", inline=False)
+        embed.add_field(
+            name="[BEHAVIOR]",
+            value="`on` lets Victor auto-approve clean usernames. `off` forces staff review via the console post.",
+            inline=False,
+        )
+        embed.add_field(
+            name="[NOTES]",
+            value="Staff still reviews the console intake post when auto verify is disabled.",
             inline=False,
         )
         return embed
@@ -248,12 +288,57 @@ class HelpView(discord.ui.View):
         await self._send_topic(interaction, "parked")
 
 
+class MenuView(discord.ui.View):
+    def __init__(self, topic_builder: Callable[[Optional[str]], discord.Embed]) -> None:
+        super().__init__(timeout=180)
+        self.topic_builder = topic_builder
+
+    async def _send_topic(self, interaction: discord.Interaction, topic: str) -> None:
+        embed = self.topic_builder(topic)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def _send_notice(self, interaction: discord.Interaction, text: str) -> None:
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, emoji="ðŸ›¡ï¸")
+    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._send_topic(interaction, "verify")
+
+    @discord.ui.button(label="Status", style=discord.ButtonStyle.secondary, emoji="ðŸ–¤")
+    async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._send_topic(interaction, "status")
+
+    @discord.ui.button(label="Auto Verify", style=discord.ButtonStyle.secondary, emoji="ðŸšš")
+    async def auto_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._send_topic(interaction, "autoverifymode")
+
+    @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary, emoji="ðŸ“Ž")
+    async def manual_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._send_topic(interaction, "manualverify")
+
+    @discord.ui.button(label="Sync", style=discord.ButtonStyle.secondary, emoji="ðŸ“Ÿ")
+    async def sync_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        admin_cog = interaction.client.get_cog("AdminCog")
+        if admin_cog is None:
+            await self._send_notice(interaction, "Victor misplaced the admin desk.")
+            return
+        await admin_cog.handle_console_sync_button(interaction)
+
+    @discord.ui.button(label="Parked", style=discord.ButtonStyle.secondary, emoji="ðŸ¦‡")
+    async def parked_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._send_topic(interaction, "parked")
+
+
 class HelpCog(commands.Cog):
-    def __init__(self, bot: commands.Bot) -> None:
+    def __init__(self, bot: commands.Bot, cfg: Config) -> None:
         self.bot = bot
+        self.cfg = cfg
 
     def _topic_embed(self, feature: Optional[str]) -> discord.Embed:
         return build_help_topic_embed(feature)
+
+    def _menu_embed(self) -> discord.Embed:
+        return build_menu_embed(self.cfg)
 
     @commands.command(name="help")
     async def help_command(self, ctx: commands.Context, *, feature: Optional[str] = None) -> None:
@@ -262,5 +347,11 @@ class HelpCog(commands.Cog):
         await ctx.send(embed=embed, view=view)
 
 
+    @commands.command(name="menu")
+    async def menu_command(self, ctx: commands.Context) -> None:
+        await ctx.send(embed=self._menu_embed(), view=MenuView(self._topic_embed))
+
+
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(HelpCog(bot))
+    cfg = bot.victor_config
+    await bot.add_cog(HelpCog(bot, cfg))
