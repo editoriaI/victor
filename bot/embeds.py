@@ -102,6 +102,7 @@ def verify_success_embed(
     manual: bool = False,
     captured: bool = False,
     recognition_note: Optional[str] = None,
+    trusted_roles: Optional[List[str]] = None,
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
@@ -112,6 +113,8 @@ def verify_success_embed(
     embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
     embed.add_field(name="[RESULT]", value="PASS", inline=True)
     notes: List[str] = []
+    if trusted_roles:
+        embed.add_field(name="[TRUSTED]", value=", ".join(trusted_roles), inline=True)
     if manual:
         notes.append("Manual override applied.")
     elif captured:
@@ -509,6 +512,7 @@ def status_embed(
     state: Optional[str] = None,
     code: Optional[str] = None,
     fail_count: Optional[int] = None,
+    trusted_roles: Optional[List[str]] = None,
 ) -> discord.Embed:
     descriptions = {
         "STAFF REVIEW": "[ STATUS: PENDING ]\n\nYour intake is sitting on the staff desk.\n\nWaiting. Judged. Unmoved.\n\nYou'll know when they care.",
@@ -530,6 +534,8 @@ def status_embed(
         embed.add_field(name="[CODE]", value=code, inline=True)
     if fail_count is not None:
         embed.add_field(name="[FAIL COUNT]", value=str(fail_count), inline=True)
+    if trusted_roles:
+        embed.add_field(name="[TRUSTED]", value=", ".join(trusted_roles), inline=True)
     embed.add_field(
         name="[THREAD]",
         value=_verification_stage_summary(verified, state, fail_count),

@@ -220,6 +220,17 @@ class VerifyCog(commands.Cog):
                 return f"Quick install recognition: {label} status noted on this intake."
         return None
 
+    def _trusted_roles(self, member: discord.Member) -> List[str]:
+        trusted: List[str] = []
+        if not member.guild:
+            return trusted
+        for key in ("seller", "buyer"):
+            for role_name in self.cfg.roles.get(key, []):
+                role = self._find_role(member.guild, role_name)
+                if role and role in member.roles and role.name not in trusted:
+                    trusted.append(role.name)
+        return trusted
+
     def _prompt_key(self, member: discord.Member) -> Optional[tuple[int, int]]:
         if not member.guild:
             return None
@@ -296,6 +307,7 @@ class VerifyCog(commands.Cog):
             or user_row.get("highrise_username")
         )
 
+        trusted_roles = self._trusted_roles(target)
         return embeds.status_embed(
             target.mention,
             highrise_username,
@@ -303,6 +315,7 @@ class VerifyCog(commands.Cog):
             state=state,
             code=None,
             fail_count=code_row.get("fail_count") if code_row else None,
+            trusted_roles=trusted_roles,
         )
 
     def _build_verify_view(self) -> VerifyBeginView:
@@ -517,6 +530,7 @@ class VerifyCog(commands.Cog):
 
         nickname_changed, unlocked_roles = await self._apply_verified_access(member, highrise_username)
         recognition_note = self._special_role_note(member)
+        trusted_roles = self._trusted_roles(member)
 
         approval_notice = embeds.approval_dm_embed(highrise_username)
         try:
@@ -526,6 +540,19 @@ class VerifyCog(commands.Cog):
 
         public_notice = embeds.verify_staff_approved_embed(member.mention, highrise_username)
         await self._send_verify_lane_notice(member.guild, member, public_notice)
+
+        if trusted_roles:
+            await log_system_event(
+                self.bot,
+                self.cfg,
+                "Trusted Member Verified",
+                details=(
+                    f"user={member.id} | roles={','.join(trusted_roles)} | "
+                    f"highrise={highrise_username}"
+                ),
+                level=logging.INFO,
+                publish_to_channel=True,
+            )
 
         if manual:
             return embeds.manual_verify_ready_embed(member.mention, highrise_username)
@@ -543,6 +570,7 @@ class VerifyCog(commands.Cog):
             manual=manual,
             captured=not manual,
             recognition_note=recognition_note,
+            trusted_roles=trusted_roles,
         )
 
     async def _reject_highrise_username(
