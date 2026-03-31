@@ -3,8 +3,9 @@ from typing import Callable, Optional
 import discord
 from discord.ext import commands
 
-from bot import embeds
+from bot import db, embeds
 from bot.config import Config
+from bot.utils.permissions import has_any_role
 
 HELP_OPTIONS = (
     ("verify", "🕯️ Verify", "Open intake and send the username to staff approval"),
@@ -293,10 +294,55 @@ class HelpView(discord.ui.View):
         await self._send_topic(interaction, "parked")
 
 
+class StatusSubMenu(discord.ui.View):
+    def __init__(self, help_cog: "HelpCog") -> None:
+        super().__init__(timeout=180)
+        self.help_cog = help_cog
+
+    async def _send_topic(self, interaction: discord.Interaction, topic: str) -> None:
+        embed = build_help_topic_embed(topic)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    async def _send_notice(self, interaction: discord.Interaction, text: str) -> None:
+        await interaction.response.send_message(text, ephemeral=True)
+
+    @discord.ui.button(label="Status Command", style=discord.ButtonStyle.secondary, emoji="🖤")
+    async def status_command(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        await self._send_topic(interaction, "status")
+
+    @discord.ui.button(label="Admin Overview", style=discord.ButtonStyle.primary, emoji="📟")
+    async def admin_overview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        author = interaction.user
+        if not isinstance(author, discord.Member) or not self.help_cog._is_admin_member(author):
+            await self._send_notice(interaction, "You do not have the clearance to see the admin snapshot.")
+            return
+        counts = self.help_cog._verification_counts()
+        embed = embeds.make_embed(
+            f"{embeds.TITLE_ADMIN} // STATUS OVERVIEW",
+            "Current verification snapshot.",
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(name="[VERIFIED]", value=str(counts["verified"]), inline=True)
+        embed.add_field(name="[PENDING]", value=str(counts["pending"]), inline=True)
+        embed.add_field(name="[REJECTED]", value=str(counts["rejected"]), inline=True)
+        embed.add_field(name="[OTHER]", value=str(counts["other"]), inline=True)
+        embed.add_field(name="[TOTAL]", value=str(counts["total"]), inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @discord.ui.button(label="Send Note", style=discord.ButtonStyle.secondary, emoji="📗")
+    async def send_note(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        guidance = (
+            "Mention the member or role, check the file with `!status @user`, "
+            "then follow up with `!manualverify @user username` or a written staff note."
+        )
+        await self._send_notice(interaction, guidance)
+
+
 class MenuView(discord.ui.View):
-    def __init__(self, topic_builder: Callable[[Optional[str]], discord.Embed]) -> None:
+    def __init__(self, topic_builder: Callable[[Optional[str]], discord.Embed], help_cog: "HelpCog") -> None:
         super().__init__(timeout=180)
         self.topic_builder = topic_builder
+        self.help_cog = help_cog
 
     async def _send_topic(self, interaction: discord.Interaction, topic: str) -> None:
         embed = self.topic_builder(topic)
@@ -305,23 +351,27 @@ class MenuView(discord.ui.View):
     async def _send_notice(self, interaction: discord.Interaction, text: str) -> None:
         await interaction.response.send_message(text, ephemeral=True)
 
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, emoji="ðŸ›¡ï¸")
+    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, emoji="🛡️")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "verify")
 
-    @discord.ui.button(label="Status", style=discord.ButtonStyle.secondary, emoji="ðŸ–¤")
+    @discord.ui.button(label="Status", style=discord.ButtonStyle.secondary, emoji="🖤")
     async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "status")
+        await interaction.response.send_message(
+            "Status desk incoming.",
+            view=StatusSubMenu(self.help_cog),
+            ephemeral=True,
+        )
 
-    @discord.ui.button(label="Auto Verify", style=discord.ButtonStyle.secondary, emoji="ðŸšš")
+    @discord.ui.button(label="Auto Verify", style=discord.ButtonStyle.secondary, emoji="🚚")
     async def auto_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "autoverifymode")
 
-    @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary, emoji="ðŸ“Ž")
+    @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary, emoji="📎")
     async def manual_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "manualverify")
 
-    @discord.ui.button(label="Sync", style=discord.ButtonStyle.secondary, emoji="ðŸ“Ÿ")
+    @discord.ui.button(label="Sync", style=discord.ButtonStyle.secondary, emoji="📟")
     async def sync_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         admin_cog = interaction.client.get_cog("AdminCog")
         if admin_cog is None:
@@ -329,15 +379,37 @@ class MenuView(discord.ui.View):
             return
         await admin_cog.handle_console_sync_button(interaction)
 
-    @discord.ui.button(label="Parked", style=discord.ButtonStyle.secondary, emoji="ðŸ¦‡")
+    @discord.ui.button(label="Parked", style=discord.ButtonStyle.secondary, emoji="🦇")
     async def parked_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "parked")
-
-
 class HelpCog(commands.Cog):
     def __init__(self, bot: commands.Bot, cfg: Config) -> None:
         self.bot = bot
         self.cfg = cfg
+
+    def _is_admin_member(self, member: discord.Member) -> bool:
+        if has_any_role(member.roles, self.cfg.roles.get("owner", [])):
+            return True
+        return has_any_role(member.roles, self.cfg.roles.get("admin", []))
+
+    def _verification_counts(self) -> dict[str, int]:
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            rows = conn.execute(
+                "SELECT UPPER(status) AS status, COUNT(*) AS count FROM verification_codes GROUP BY status"
+            ).fetchall()
+        finally:
+            conn.close()
+        total = sum(row["count"] for row in rows)
+        counts = {row["status"]: row["count"] for row in rows}
+        verified = sum(
+            counts.get(status, 0)
+            for status in ("VERIFIED", "USERNAME LOGGED", "LOGGED", "PASS")
+        )
+        pending = counts.get("PENDING", 0)
+        rejected = counts.get("REJECTED", 0)
+        other = total - verified - pending - rejected
+        return {"verified": verified, "pending": pending, "rejected": rejected, "other": max(other, 0), "total": total}
 
     def _topic_embed(self, feature: Optional[str]) -> discord.Embed:
         return build_help_topic_embed(feature)
@@ -354,7 +426,7 @@ class HelpCog(commands.Cog):
 
     @commands.command(name="menu")
     async def menu_command(self, ctx: commands.Context) -> None:
-        await ctx.send(embed=self._menu_embed(), view=MenuView(self._topic_embed))
+        await ctx.send(embed=self._menu_embed(), view=MenuView(self._topic_embed, self))
 
 
 async def setup(bot: commands.Bot) -> None:
