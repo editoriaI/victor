@@ -4,7 +4,6 @@ import discord
 from discord.ext import commands
 
 from bot import embeds
-from bot.config import Config
 
 HELP_OPTIONS = (
     ("verify", "🕯️ Verify", "Open intake and send the username to staff approval"),
@@ -15,29 +14,6 @@ HELP_OPTIONS = (
 )
 
 
-def build_menu_embed() -> discord.Embed:
-    embed = embeds.make_embed(
-        f"{embeds.TITLE_HELP} // MENU",
-        "Command board online. Press a lane and Victor executes the associated flow (or explains how staff can finish the lane).",
-        embeds.COLOR_NEUTRAL,
-    )
-    embed.add_field(name="[LIVE TEXT]", value="!menu\n!help\n!verify\n!manualverify\n!status\n!sync\n!autoverify (staff only)", inline=False)
-    embed.add_field(
-        name="[HOW THIS BOARD WORKS]",
-        value=(
-            "verify launches intake.\n"
-            "status pulls your current file.\n"
-            "manual and parked open focused reference panels.\n"
-            "sync fires only if the clicker has admin access."
-        ),
-        inline=False,
-    )
-    embed.add_field(
-        name="[BACKSTAGE]",
-        value="blackmarket, matchmaking, and restart are still parked until we bring them back properly.",
-        inline=False,
-    )
-    return embed
 
 
 def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
@@ -272,100 +248,12 @@ class HelpView(discord.ui.View):
         await self._send_topic(interaction, "parked")
 
 
-class MenuView(discord.ui.View):
-    def __init__(self, topic_builder: Callable[[Optional[str]], discord.Embed], cfg: Config) -> None:
-        super().__init__(timeout=180)
-        self.topic_builder = topic_builder
-        self.cfg = cfg
-        self.verify_channel = (
-            f"<#{cfg.verify_channel_id}>" if cfg.verify_channel_id else "the verify lane"
-        )
-
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, emoji="🛡️")
-    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        embed = embeds.make_embed(
-            f"{embeds.TITLE_HELP} // VERIFY MENU",
-            "Pick how you want to work around the verify lane.",
-            embeds.COLOR_NEUTRAL,
-        )
-        embed.add_field(name="[INTAKE]", value="`!verify`", inline=False)
-        embed.add_field(name="[STATUS]", value="`!status` / `!status @user`", inline=False)
-        embed.add_field(name="[AUTO]", value="`!autoverify on|off`", inline=False)
-        embed.add_field(name="[LANE]", value=self.verify_channel, inline=False)
-        await interaction.response.send_message(
-            embed=embed,
-            view=VerifySubMenu(self.verify_channel),
-            ephemeral=True,
-        )
-
-    @discord.ui.button(label="Sync", style=discord.ButtonStyle.secondary, emoji="📟")
-    async def sync_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        admin_cog = interaction.client.get_cog("AdminCog")
-        if admin_cog is None:
-            await interaction.response.send_message("Victor misplaced the admin desk.", ephemeral=True)
-            return
-        await admin_cog.handle_console_sync_button(interaction)
-
-    @discord.ui.button(label="Parked", style=discord.ButtonStyle.secondary, emoji="🦇")
-    async def parked_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        embed = embeds.make_embed(
-            f"{embeds.TITLE_HELP} // PARKED",
-            "The following commands are still parked until those lanes return.",
-            embeds.COLOR_NEUTRAL,
-        )
-        embed.add_field(
-            name="[PARKED TEXT]",
-            value=(
-                "`!blackmarket list [query]`\n"
-                "`!blackmarket add \"item\" price`\n"
-                "`!blackmarket remove <listing_id>`\n"
-                "`!request \"item\" max_price`\n"
-                "`!cancel <request_id>`\n"
-                "`!accept <match_id>`\n"
-                "`!decline <match_id>`"
-            ),
-            inline=False,
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-class VerifySubMenu(discord.ui.View):
-    def __init__(self, verify_channel: str):
-        super().__init__(timeout=180)
-        self.verify_channel = verify_channel or "the verify lane"
-
-    @discord.ui.button(label="Run Verify", style=discord.ButtonStyle.success, emoji="🛠️")
-    async def run_verify(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(
-            f"Go to {self.verify_channel} and run `!verify` to open the intake prompt.",
-            ephemeral=True,
-        )
-
-    @discord.ui.button(label="Check Status", style=discord.ButtonStyle.secondary, emoji="🕵️")
-    async def check_status(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(
-            f"Use `!status` or `!status @user` in {self.verify_channel} to inspect a thread.",
-            ephemeral=True,
-        )
-
-    @discord.ui.button(label="Auto Verify", style=discord.ButtonStyle.secondary, emoji="⚙️")
-    async def auto_verify(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.send_message(
-            "Toggle auto-approval with `!autoverify on` or `!autoverify off`.",
-            ephemeral=True,
-        )
-
-
 class HelpCog(commands.Cog):
-    def __init__(self, bot: commands.Bot, cfg: Config) -> None:
+    def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
-        self.cfg = cfg
 
     def _topic_embed(self, feature: Optional[str]) -> discord.Embed:
         return build_help_topic_embed(feature)
-
-    def _menu_embed(self) -> discord.Embed:
-        return build_menu_embed()
 
     @commands.command(name="help")
     async def help_command(self, ctx: commands.Context, *, feature: Optional[str] = None) -> None:
@@ -373,10 +261,6 @@ class HelpCog(commands.Cog):
         view = HelpView(self._topic_embed) if not feature else None
         await ctx.send(embed=embed, view=view)
 
-    @commands.command(name="menu")
-    async def menu_command(self, ctx: commands.Context) -> None:
-        await ctx.send(embed=self._menu_embed(), view=MenuView(self._topic_embed, self.cfg))
 
 async def setup(bot: commands.Bot) -> None:
-    cfg = bot.victor_config
-    await bot.add_cog(HelpCog(bot, cfg))
+    await bot.add_cog(HelpCog(bot))

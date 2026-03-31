@@ -77,6 +77,7 @@ class VerifyCog(commands.Cog):
         self.bot = bot
         self.cfg = cfg
         self.logger = logging.getLogger("victor.verify")
+        self._prompt_messages: dict[tuple[int, int], discord.Message] = {}
 
     def _has_any_role(self, member: discord.Member, role_names: List[str]) -> bool:
         return has_any_role(member.roles, role_names)
@@ -218,6 +219,32 @@ class VerifyCog(commands.Cog):
             if roles and self._has_any_role(member, roles):
                 return f"Quick install recognition: {label} status noted on this intake."
         return None
+
+    def _prompt_key(self, member: discord.Member) -> Optional[tuple[int, int]]:
+        if not member.guild:
+            return None
+        return (member.guild.id, member.id)
+
+    async def _cleanup_previous_prompt(self, member: discord.Member) -> None:
+        key = self._prompt_key(member)
+        if not key:
+            return
+        previous = self._prompt_messages.pop(key, None)
+        if previous:
+            await self._delete_message_safely(previous)
+
+    def _track_prompt_message(self, member: discord.Member, message: discord.Message) -> None:
+        key = self._prompt_key(member)
+        if not key:
+            return
+        self._prompt_messages[key] = message
+
+    def _forget_prompt_message(self, member: discord.Member) -> None:
+        key = self._prompt_key(member)
+        if not key:
+            return
+        self._prompt_messages.pop(key, None)
+
     async def _delete_message_safely(self, message: Optional[discord.Message]) -> None:
         if message is None:
             return
@@ -560,8 +587,10 @@ class VerifyCog(commands.Cog):
         )
 
     async def _send_verify_prompt_to_context(self, ctx: commands.Context, member: discord.Member) -> None:
+        await self._cleanup_previous_prompt(member)
         embed = self._build_verify_prompt_embed(member)
-        await ctx.send(embed=embed, view=self._build_verify_view())
+        message = await ctx.send(embed=embed, view=self._build_verify_view())
+        self._track_prompt_message(member, message)
 
     async def handle_plain_text_verify_trigger(self, message: discord.Message) -> bool:
         if not message.guild or not isinstance(message.author, discord.Member):
@@ -587,12 +616,14 @@ class VerifyCog(commands.Cog):
             )
             return True
 
-        await message.reply(
+        await self._cleanup_previous_prompt(message.author)
+        reply = await message.reply(
             embed=self._build_verify_prompt_embed(message.author),
             view=self._build_verify_view(),
             mention_author=False,
             delete_after=60,
         )
+        self._track_prompt_message(message.author, reply)
         return True
 
     async def _send_verify_prompt_to_interaction(
@@ -704,6 +735,7 @@ class VerifyCog(commands.Cog):
 
         await self._send_interaction_embed(interaction, embed, ephemeral=True)
         await self._delete_message_safely(interaction.message)
+        self._forget_prompt_message(target)
 
     async def handle_menu_verify_button(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:

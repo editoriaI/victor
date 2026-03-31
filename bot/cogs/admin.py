@@ -112,14 +112,14 @@ class AdminCog(commands.Cog):
         embed.add_field(name="[STATE]", value=state_text, inline=True)
         await ctx.send(embed=embed)
 
-    @commands.command(name="autoverify")
+    @commands.command(name="autoverifymode", aliases=["autoverifyflag"])
     async def autoverify_command(self, ctx: commands.Context, mode: Optional[str] = None) -> None:
         if not self._is_admin(ctx.author):
             await ctx.send(embed=embeds.permission_denied_embed("Victor Admin"))
             return
 
         if not mode or mode.lower() not in {"on", "off"}:
-            await ctx.send(embed=embeds.invalid_usage_embed("!autoverify on|off"))
+            await ctx.send(embed=embeds.invalid_usage_embed("!autoverifymode on|off"))
             return
 
         enable = mode.lower() == "on"
