@@ -31,6 +31,11 @@ def build_menu_embed(cfg: Config) -> discord.Embed:
     embed.add_field(name="[LIVE COMMANDS]", value="`!verify`, `!status`, `!manualverify`, `!sync`, `!autoverifymode on|off`", inline=False)
     embed.add_field(name="[VERIFY LANE]", value=f"Run intake and status checks inside {verify_lane}.", inline=False)
     embed.add_field(name="[AUTO MODE]", value="`!autoverifymode on` lets Victor auto-approve, `off` keeps staff in the loop.", inline=False)
+    embed.add_field(
+        name="[FORCE SYNC]",
+        value="Hit the `Sync` button to force a slash-tree refresh (admin-only). Victor will post the result back to this channel as an embed.",
+        inline=False,
+    )
     embed.add_field(name="[NAVIGATION]", value="Use the buttons to drop straight into a topic without typing.", inline=False)
     return embed
 
