@@ -220,6 +220,19 @@ class VerifyCog(commands.Cog):
                 return f"Quick install recognition: {label} status noted on this intake."
         return None
 
+    def _status_guidance(self, verification_status: str, code_row: Optional[dict]) -> str:
+        lane = self._verify_channel_mention() or "the hr-id lane"
+        status = (verification_status or "").upper()
+        if status in {"USERNAME LOGGED", "VERIFIED"}:
+            return "You're verified. Keep the bio intact and let staff know if you need changes."
+        if status == "PENDING":
+            return "Staff is reviewing the intake. Stand by for the console to post the result."
+        if status == "RETRY REQUESTED":
+            return f"Staff requested a cleaner username. Update the entry and run `!verify` in {lane} again."
+        if status == "REJECTED":
+            return f"Staff rejected the intake. Fix the username and resubmit with `!verify` inside {lane}."
+        return f"No intake logged. Run `!verify` inside {lane} or use the Verify button from `!menu`."
+
     def _trusted_roles(self, member: discord.Member) -> List[str]:
         trusted: List[str] = []
         if not member.guild:
@@ -306,16 +319,20 @@ class VerifyCog(commands.Cog):
             (code_row or {}).get("highrise_username")
             or user_row.get("highrise_username")
         )
-
         trusted_roles = self._trusted_roles(target)
+        db_code = (code_row or {}).get("code")
+        db_status = (code_row or {}).get("status")
+        guidance = self._status_guidance(verification_status, code_row)
         return embeds.status_embed(
             target.mention,
             highrise_username,
             verified,
             state=state,
-            code=None,
+            code=db_code,
             fail_count=code_row.get("fail_count") if code_row else None,
             trusted_roles=trusted_roles,
+            db_status=db_status,
+            guidance=guidance,
         )
 
     def _build_verify_view(self) -> VerifyBeginView:

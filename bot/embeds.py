@@ -513,6 +513,8 @@ def status_embed(
     code: Optional[str] = None,
     fail_count: Optional[int] = None,
     trusted_roles: Optional[List[str]] = None,
+    db_status: Optional[str] = None,
+    guidance: Optional[str] = None,
 ) -> discord.Embed:
     descriptions = {
         "STAFF REVIEW": "[ STATUS: PENDING ]\n\nYour intake is sitting on the staff desk.\n\nWaiting. Judged. Unmoved.\n\nYou'll know when they care.",
@@ -536,6 +538,8 @@ def status_embed(
         embed.add_field(name="[FAIL COUNT]", value=str(fail_count), inline=True)
     if trusted_roles:
         embed.add_field(name="[TRUSTED]", value=", ".join(trusted_roles), inline=True)
+    if db_status:
+        embed.add_field(name="[DB STATUS]", value=db_status, inline=True)
     embed.add_field(
         name="[THREAD]",
         value=_verification_stage_summary(verified, state, fail_count),
@@ -543,6 +547,8 @@ def status_embed(
     )
     if state == "RETRY REQUESTED":
         embed.add_field(name="[NEXT]", value="submit `verify` again with the corrected Highrise username.", inline=False)
+    if guidance:
+        embed.add_field(name="[GUIDANCE]", value=guidance, inline=False)
     return embed
 
 
