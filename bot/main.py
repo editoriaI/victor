@@ -15,7 +15,12 @@ from discord.ext import commands
 from bot import embeds
 from bot.config import load_config
 from bot import db
-from bot.utils.command_logging import log_command_event, log_system_event, maybe_publish_patch_note
+from bot.utils.command_logging import (
+    log_command_event,
+    log_system_event,
+    maybe_publish_patch_note,
+    should_publish_command_success,
+)
 from bot.utils.auto_sync import maybe_auto_sync
 from bot.utils.command_replay import scan_missed_commands
 from bot.utils.permissions import classify_member_access
@@ -483,14 +488,16 @@ def create_bot(cfg) -> commands.Bot:
     async def on_app_command_completion(
         interaction: discord.Interaction, command: discord.app_commands.Command
     ) -> None:
+        command_name = command.qualified_name
         await log_command_event(
             bot,
             cfg,
             "success",
             "slash",
             interaction.user.id,
-            command.qualified_name,
+            command_name,
             str(interaction.guild_id) if interaction.guild_id else "dm",
+            publish_to_channel=should_publish_command_success(command_name),
         )
 
     @bot.event

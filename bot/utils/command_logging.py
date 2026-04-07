@@ -54,6 +54,12 @@ COMMAND_CODES = {
     "unknown": 99,
 }
 
+QUIET_SUCCESS_COMMANDS = {
+    "help",
+    "menu",
+    "status",
+}
+
 PATCH_NOTE_ID = "2026-03-26-verify-intake-refresh"
 
 
@@ -137,6 +143,11 @@ def _command_label(surface: Optional[str], command_name: Optional[str]) -> str:
     if surface == "slash":
         return f"/{command_name}"
     return f"!{command_name}"
+
+
+def should_publish_command_success(command_name: Optional[str]) -> bool:
+    normalized = (command_name or "").casefold()
+    return normalized not in QUIET_SUCCESS_COMMANDS
 
 
 def _event_code(

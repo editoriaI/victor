@@ -5,7 +5,7 @@ from discord.ext import commands
 
 from bot import embeds
 from bot.config import Config
-from bot.utils.command_logging import log_command_event
+from bot.utils.command_logging import log_command_event, should_publish_command_success
 
 
 class MonitorCog(commands.Cog):
@@ -32,15 +32,17 @@ class MonitorCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_completion(self, ctx: commands.Context) -> None:
+        command_name = ctx.command.qualified_name if ctx.command else "unknown"
         await log_command_event(
             self.bot,
             self.cfg,
             "success",
             "prefix",
             ctx.author.id,
-            ctx.command.qualified_name if ctx.command else "unknown",
+            command_name,
             str(ctx.guild.id) if ctx.guild else "dm",
             details=ctx.message.content,
+            publish_to_channel=should_publish_command_success(command_name),
         )
 
     @commands.Cog.listener()

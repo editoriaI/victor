@@ -104,10 +104,10 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "status":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // STATUS",
-            "[ STATUS: LOGGED ]\nSee whether your intake is pending, waiting for staff, or already engraved on file.",
+            "[ STATUS: LOGGED ]\nMembers can check their own file. Staff can also scan only the users who already entered the verify flow to see who has been accepted and who still has not.",
             embeds.COLOR_NEUTRAL,
         )
-        embed.add_field(name="[TEXT]", value="!status or !status @user", inline=False)
+        embed.add_field(name="[TEXT]", value="!status | !status @user | use the menu Status button", inline=False)
         embed.add_field(
             name="[GUIDANCE]",
             value="If Victor says 'No intake', rerun `!verify` inside the hr-id lane and resend the username.",
@@ -115,7 +115,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         )
         embed.add_field(
             name="[ADMIN]",
-            value="Admins use the submenu to check counts, send notes, and keep the inks clean.",
+            value="Staff menu/slash status stays private. Typed staff `!status` is sent by DM. Staff roster output uses names only and only includes users who already used verify.",
             inline=False,
         )
         return embed
@@ -162,7 +162,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         )
         embed.add_field(
             name="[ACCESS]",
-            value="Browsing is open. Creating and removing listings still requires Blackmarket or admin clearance.",
+            value="Browsing stays read-only. Creating and removing listings now requires the verified Member role or admin clearance.",
             inline=False,
         )
         return embed

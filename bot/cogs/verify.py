@@ -277,6 +277,97 @@ class VerifyCog(commands.Cog):
         except discord.HTTPException:
             self.logger.debug("Could not delete intake message %s", getattr(message, "id", "unknown"))
 
+    async def _guild_human_members(self, guild: discord.Guild) -> list[discord.Member]:
+        if not guild.chunked:
+            try:
+                await guild.chunk(cache=True)
+            except (discord.HTTPException, discord.ClientException, discord.Forbidden):
+                pass
+        return sorted((member for member in guild.members if not member.bot), key=lambda member: member.display_name.casefold())
+
+    def _verified_status_subject_ids(self) -> set[str]:
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            rows = conn.execute(
+                """
+                SELECT DISTINCT u.discord_id AS discord_id
+                FROM users u
+                INNER JOIN verification_codes vc ON vc.user_id = u.id
+                """
+            ).fetchall()
+        finally:
+            conn.close()
+        return {
+            str(row["discord_id"]).strip()
+            for row in rows
+            if str(row["discord_id"]).strip()
+        }
+
+    def _member_names_block(self, members: list[discord.Member], *, char_limit: int = 900) -> str:
+        if not members:
+            return "None"
+
+        parts: list[str] = []
+        used = 0
+        for index, member in enumerate(members):
+            name = member.display_name or member.name
+            addition = name if not parts else f", {name}"
+            remaining = len(members) - index - 1
+            suffix = f" (+{remaining} more)" if remaining > 0 else ""
+            if used + len(addition) + len(suffix) > char_limit:
+                if not parts:
+                    return name
+                return f"{''.join(parts)} (+{len(members) - index} more)"
+            parts.append(addition)
+            used += len(addition)
+        return "".join(parts)
+
+    async def _build_server_status_overview_embed(self, guild: discord.Guild) -> discord.Embed:
+        members = await self._guild_human_members(guild)
+        tracked_ids = self._verified_status_subject_ids()
+        tracked_members = [member for member in members if str(member.id) in tracked_ids]
+        verified_roles = self.cfg.roles.get("verified_unlock", [])
+
+        verified_members: list[discord.Member] = []
+        unverified_members: list[discord.Member] = []
+        for member in tracked_members:
+            if has_any_role(member, verified_roles):
+                verified_members.append(member)
+            else:
+                unverified_members.append(member)
+
+        verified_role_label = ", ".join(verified_roles) if verified_roles else "No verified role configured"
+        embed = embeds.make_embed(
+            embeds.TITLE_STATUS,
+            "Guild-wide verification scan for members who have already used the verify command, based on who currently has the verified role after staff acceptance.",
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(name="[VERIFIED ROLE]", value=verified_role_label, inline=False)
+        embed.add_field(name="[VERIFY USERS]", value=str(len(tracked_members)), inline=True)
+        embed.add_field(name="[VERIFIED]", value=str(len(verified_members)), inline=True)
+        embed.add_field(name="[NOT VERIFIED]", value=str(len(unverified_members)), inline=True)
+        embed.add_field(name="[VERIFIED MEMBERS]", value=self._member_names_block(verified_members), inline=False)
+        embed.add_field(name="[NOT VERIFIED MEMBERS]", value=self._member_names_block(unverified_members), inline=False)
+        return embed
+
+    async def _send_staff_status_context(self, ctx: commands.Context, embed: discord.Embed) -> None:
+        try:
+            await ctx.author.send(embed=embed)
+        except discord.HTTPException:
+            await ctx.send(
+                embed=embeds.urgent_embed(
+                    "STATUS",
+                    "[ PRIVATE DELIVERY FAILED ]\n\nVictor could not DM the staff status report.\n\nOpen your DMs and try again.",
+                ),
+                delete_after=12,
+            )
+            return
+
+        try:
+            await ctx.message.delete()
+        except discord.HTTPException:
+            pass
+
     def _status_payload(self, target: discord.Member) -> Optional[dict]:
         conn = db.get_connection(self.cfg.db_path)
         try:
@@ -807,12 +898,15 @@ class VerifyCog(commands.Cog):
         if not interaction.guild:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
             return
-        if await self._redirect_to_verify_channel_for_interaction(interaction):
-            return
         actor = interaction.user
         if not isinstance(actor, discord.Member):
             await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
             return
+
+        if self._can_view_others(actor):
+            await self._send_server_status_interaction(interaction, interaction.guild, ephemeral=True)
+            return
+
         payload = self._status_payload(actor)
         if not payload:
             await self._send_interaction_embed(interaction, embeds.verify_missing_record_embed(actor.mention), ephemeral=True)
@@ -831,6 +925,16 @@ class VerifyCog(commands.Cog):
             await self._send_interaction_embed(interaction, embeds.verify_missing_record_embed(target.mention), ephemeral=ephemeral)
             return
         await self._send_interaction_embed(interaction, self._build_status_embed(target, payload), ephemeral=ephemeral)
+
+    async def _send_server_status_interaction(
+        self,
+        interaction: discord.Interaction,
+        guild: discord.Guild,
+        *,
+        ephemeral: bool = True,
+    ) -> None:
+        embed = await self._build_server_status_overview_embed(guild)
+        await self._send_interaction_embed(interaction, embed, ephemeral=ephemeral)
 
     async def handle_manual_verify_request(
         self,
@@ -1066,7 +1170,7 @@ class VerifyCog(commands.Cog):
     async def verify_slash(self, interaction: discord.Interaction) -> None:
         await self.handle_menu_verify_button(interaction)
 
-    @app_commands.command(name="status", description="Check your current verification status.")
+    @app_commands.command(name="status", description="Check your status or scan the verified roster.")
     @app_commands.describe(member="Optional member to inspect")
     @app_commands.guild_only()
     async def status_slash(
@@ -1077,12 +1181,14 @@ class VerifyCog(commands.Cog):
         if not interaction.guild:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
             return
-        if await self._redirect_to_verify_channel_for_interaction(interaction):
-            return
 
         actor = interaction.user
         if not isinstance(actor, discord.Member):
             await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
+            return
+
+        if member is None and self._can_view_others(actor):
+            await self._send_server_status_interaction(interaction, interaction.guild, ephemeral=True)
             return
 
         target = member or actor
@@ -1176,8 +1282,11 @@ class VerifyCog(commands.Cog):
 
     @commands.command(name="status")
     async def status(self, ctx: commands.Context, member: Optional[discord.Member] = None) -> None:
-        if await self._redirect_to_verify_channel_for_context(ctx):
+        if member is None and self._can_view_others(ctx.author):
+            embed = await self._build_server_status_overview_embed(ctx.guild)
+            await self._send_staff_status_context(ctx, embed)
             return
+
         target = member or ctx.author
         if member and member != ctx.author and not self._can_view_others(ctx.author):
             await ctx.send(embed=embeds.permission_denied_embed("Verifier"))
@@ -1190,9 +1299,17 @@ class VerifyCog(commands.Cog):
 
         payload = self._status_payload(target)
         if not payload:
-            await ctx.send(embed=embeds.verify_missing_record_embed(target.mention))
+            embed = embeds.verify_missing_record_embed(target.mention)
+            if self._can_view_others(ctx.author):
+                await self._send_staff_status_context(ctx, embed)
+            else:
+                await ctx.send(embed=embed)
             return
-        await ctx.send(embed=self._build_status_embed(target, payload))
+        embed = self._build_status_embed(target, payload)
+        if self._can_view_others(ctx.author):
+            await self._send_staff_status_context(ctx, embed)
+            return
+        await ctx.send(embed=embed)
 
 async def setup(bot: commands.Bot) -> None:
     cfg = bot.victor_config

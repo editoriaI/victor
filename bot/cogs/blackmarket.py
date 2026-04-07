@@ -26,10 +26,16 @@ class BlackmarketCog(commands.Cog):
             return True
         return self._has_any_role(member, self.cfg.roles.get("admin", []))
 
+    def _verified_market_roles(self) -> list:
+        return self.cfg.roles.get("verified_unlock", []) or self.cfg.roles.get("member", [])
+
+    def _is_verified_member(self, member: discord.Member) -> bool:
+        return self._has_any_role(member, self._verified_market_roles())
+
     def _can_blackmarket(self, member: discord.Member) -> bool:
         if self._is_admin(member):
             return True
-        return self._has_any_role(member, self.cfg.roles.get("blackmarket", []))
+        return self._is_verified_member(member)
 
     def _blacklist_record(self, discord_id: str) -> Optional[dict]:
         conn = db.get_connection(self.cfg.db_path)
@@ -103,7 +109,7 @@ class BlackmarketCog(commands.Cog):
     @blackmarket.command(name="add")
     async def add_listing(self, ctx: commands.Context, item_name: str, price: int) -> None:
         if not self._can_blackmarket(ctx.author):
-            embed = embeds.permission_denied_embed("Blackmarket")
+            embed = embeds.permission_denied_embed("Verified Member")
             await ctx.send(embed=embed)
             return
 
@@ -138,7 +144,7 @@ class BlackmarketCog(commands.Cog):
     @blackmarket.command(name="remove")
     async def remove_listing(self, ctx: commands.Context, listing_id: int) -> None:
         if not self._can_blackmarket(ctx.author):
-            embed = embeds.permission_denied_embed("Blackmarket")
+            embed = embeds.permission_denied_embed("Verified Member")
             await ctx.send(embed=embed)
             return
 
@@ -157,7 +163,7 @@ class BlackmarketCog(commands.Cog):
                 return
 
             if not self._is_admin(ctx.author) and listing["seller_id"] != str(ctx.author.id):
-                embed = embeds.permission_denied_embed("Blackmarket")
+                embed = embeds.permission_denied_embed("Verified Member")
                 await ctx.send(embed=embed)
                 return
 
@@ -192,11 +198,11 @@ class BlackmarketCog(commands.Cog):
     ) -> None:
         author = interaction.user
         if not isinstance(author, discord.Member):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Blackmarket"))
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verified Member"))
             return
 
         if not self._can_blackmarket(author):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Blackmarket"))
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verified Member"))
             return
 
         author_blacklist = self._blacklist_record(str(author.id))
@@ -236,11 +242,11 @@ class BlackmarketCog(commands.Cog):
     async def market_remove_slash(self, interaction: discord.Interaction, listing_id: int) -> None:
         author = interaction.user
         if not isinstance(author, discord.Member):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Blackmarket"))
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verified Member"))
             return
 
         if not self._can_blackmarket(author):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Blackmarket"))
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verified Member"))
             return
 
         author_blacklist = self._blacklist_record(str(author.id))
@@ -258,7 +264,7 @@ class BlackmarketCog(commands.Cog):
                 return
 
             if not self._is_admin(author) and listing["seller_id"] != str(author.id):
-                await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Blackmarket"))
+                await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verified Member"))
                 return
 
             db.close_listing(conn, int(listing_id))

@@ -26,15 +26,21 @@ class MatchmakingCog(commands.Cog):
             return True
         return self._has_any_role(member, self.cfg.roles.get("admin", []))
 
+    def _verified_market_roles(self) -> list:
+        return self.cfg.roles.get("verified_unlock", []) or self.cfg.roles.get("member", [])
+
+    def _is_verified_member(self, member: discord.Member) -> bool:
+        return self._has_any_role(member, self._verified_market_roles())
+
     def _can_buyer(self, member: discord.Member) -> bool:
         if self._is_admin(member):
             return True
-        return self._has_any_role(member, self.cfg.roles.get("buyer", []))
+        return self._is_verified_member(member) and self._has_any_role(member, self.cfg.roles.get("buyer", []))
 
     def _can_seller(self, member: discord.Member) -> bool:
         if self._is_admin(member):
             return True
-        return self._has_any_role(member, self.cfg.roles.get("seller", []))
+        return self._is_verified_member(member) and self._has_any_role(member, self.cfg.roles.get("seller", []))
 
     def _blacklist_record(self, discord_id: str) -> Optional[dict]:
         conn = db.get_connection(self.cfg.db_path)
