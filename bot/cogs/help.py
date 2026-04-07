@@ -390,9 +390,9 @@ class HelpCog(commands.Cog):
         self.cfg = cfg
 
     def _is_admin_member(self, member: discord.Member) -> bool:
-        if has_any_role(member.roles, self.cfg.roles.get("owner", [])):
+        if has_any_role(member, self.cfg.roles.get("owner", [])):
             return True
-        return has_any_role(member.roles, self.cfg.roles.get("admin", []))
+        return has_any_role(member, self.cfg.roles.get("admin", []))
 
     def _verification_counts(self) -> dict[str, int]:
         conn = db.get_connection(self.cfg.db_path)

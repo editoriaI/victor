@@ -16,7 +16,7 @@ class MatchmakingCog(commands.Cog):
         self.cfg = cfg
 
     def _has_any_role(self, member: discord.Member, role_names: list) -> bool:
-        return has_any_role(member.roles, role_names)
+        return has_any_role(member, role_names)
 
     def _is_owner(self, member: discord.Member) -> bool:
         return self._has_any_role(member, self.cfg.roles.get("owner", []))

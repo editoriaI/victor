@@ -10,7 +10,7 @@ from bot import embeds
 from bot.cogs.staff_console import send_verify_intake_review_post
 from bot.config import Config
 from bot.utils.command_logging import log_command_event, log_system_event
-from bot.utils.permissions import has_any_role, normalize_role_name
+from bot.utils.permissions import classify_member_access, has_any_role, normalize_role_name
 
 VERIFY_BEGIN_BUTTON_ID = "victor:verify_begin"
 AUTO_VERIFY_FLAG = "autoverify"
@@ -81,7 +81,7 @@ class VerifyCog(commands.Cog):
         self._prompt_messages: dict[tuple[int, int], discord.Message] = {}
 
     def _has_any_role(self, member: discord.Member, role_names: List[str]) -> bool:
-        return has_any_role(member.roles, role_names)
+        return has_any_role(member, role_names)
 
     def _is_owner(self, member: discord.Member) -> bool:
         return self._has_any_role(member, self.cfg.roles.get("owner", []))
@@ -235,15 +235,14 @@ class VerifyCog(commands.Cog):
         return f"No intake logged. Run `!verify` inside {lane} or use the Verify button from `!menu`."
 
     def _trusted_roles(self, member: discord.Member) -> List[str]:
-        trusted: List[str] = []
-        if not member.guild:
-            return trusted
-        for key in ("seller", "buyer"):
-            for role_name in self.cfg.roles.get(key, []):
-                role = self._find_role(member.guild, role_name)
-                if role and role in member.roles and role.name not in trusted:
-                    trusted.append(role.name)
-        return trusted
+        access_level, matched_roles = classify_member_access(member, self.cfg.roles)
+        if access_level != "trusted":
+            return []
+        return matched_roles
+
+    def _primary_role_label(self, member: discord.Member) -> str:
+        access_level, _ = classify_member_access(member, self.cfg.roles)
+        return access_level.upper()
 
     def _prompt_key(self, member: discord.Member) -> Optional[tuple[int, int]]:
         if not member.guild:
@@ -332,6 +331,7 @@ class VerifyCog(commands.Cog):
             code=db_code,
             fail_count=code_row.get("fail_count") if code_row else None,
             trusted_roles=trusted_roles,
+            primary_role=self._primary_role_label(target),
             db_status=db_status,
             guidance=guidance,
         )
@@ -555,6 +555,7 @@ class VerifyCog(commands.Cog):
         nickname_changed, unlocked_roles = await self._apply_verified_access(member, highrise_username)
         recognition_note = self._special_role_note(member)
         trusted_roles = self._trusted_roles(member)
+        primary_role = self._primary_role_label(member)
 
         approval_notice = embeds.approval_dm_embed(highrise_username)
         try:
@@ -595,6 +596,7 @@ class VerifyCog(commands.Cog):
             captured=not manual,
             recognition_note=recognition_note,
             trusted_roles=trusted_roles,
+            primary_role=primary_role,
         )
 
     async def _reject_highrise_username(

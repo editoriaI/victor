@@ -75,6 +75,34 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS member_role_snapshots (
+          guild_id TEXT NOT NULL,
+          user_id INTEGER NOT NULL,
+          discord_id TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          primary_role TEXT NOT NULL,
+          matched_roles TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (guild_id, discord_id),
+          FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        """
+    )
+    _ensure_column(conn, "member_role_snapshots", "user_id", "INTEGER")
+    conn.execute(
+        """
+        UPDATE member_role_snapshots
+        SET user_id = (
+          SELECT users.id
+          FROM users
+          WHERE users.discord_id = member_role_snapshots.discord_id
+        )
+        WHERE user_id IS NULL
+        """
+    )
 
 
 def upsert_user(
@@ -291,6 +319,56 @@ def log_audit(conn: sqlite3.Connection, actor_id: str, action: str, target_id: O
         VALUES (?, ?, ?, ?, ?)
         """,
         (actor_id, action, target_id, details, now),
+    )
+
+
+def upsert_member_role_snapshot(
+    conn: sqlite3.Connection,
+    guild_id: str,
+    user_id: int,
+    discord_id: str,
+    display_name: str,
+    primary_role: str,
+    matched_roles: list[str],
+) -> None:
+    now = _utc_now()
+    conn.execute(
+        """
+        INSERT INTO member_role_snapshots (
+          guild_id,
+          user_id,
+          discord_id,
+          display_name,
+          primary_role,
+          matched_roles,
+          created_at,
+          updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id, discord_id) DO UPDATE SET
+          user_id = excluded.user_id,
+          display_name = excluded.display_name,
+          primary_role = excluded.primary_role,
+          matched_roles = excluded.matched_roles,
+          updated_at = excluded.updated_at
+        """,
+        (
+            guild_id,
+            user_id,
+            discord_id,
+            display_name,
+            primary_role,
+            json.dumps(matched_roles),
+            now,
+            now,
+        ),
+    )
+
+
+def remove_member_role_snapshot(conn: sqlite3.Connection, guild_id: str, discord_id: str) -> None:
+    conn.execute(
+        "DELETE FROM member_role_snapshots WHERE guild_id = ? AND discord_id = ?",
+        (guild_id, discord_id),
     )
 
 

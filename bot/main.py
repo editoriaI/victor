@@ -18,7 +18,7 @@ from bot import db
 from bot.utils.command_logging import log_command_event, log_system_event, maybe_publish_patch_note
 from bot.utils.auto_sync import maybe_auto_sync
 from bot.utils.command_replay import scan_missed_commands
-from bot.utils.permissions import has_any_role
+from bot.utils.permissions import classify_member_access
 from bot.utils.restart_notice import pop_restart_notice
 
 RESTART_EXIT_CODE = 26
@@ -271,6 +271,79 @@ def create_bot(cfg) -> commands.Bot:
     bot.victor_config = cfg
     bot.victor_restart_requested = False
 
+    def _ensure_member_user_record(conn, member: discord.Member) -> int:
+        existing = db.fetch_user_by_discord_id(conn, str(member.id))
+        existing_username = str((existing or {}).get("highrise_username") or "").strip()
+        existing_highrise_user_id = (existing or {}).get("highrise_user_id")
+        linked = int((existing or {}).get("linked") or 0)
+        return db.upsert_user(
+            conn,
+            str(member.id),
+            existing_username,
+            linked,
+            highrise_user_id=existing_highrise_user_id,
+        )
+
+    async def _sync_member_snapshot(member: discord.Member) -> None:
+        if member.bot or not member.guild:
+            return
+        primary_role, matched_roles = classify_member_access(member, cfg.roles)
+        conn = db.get_connection(cfg.db_path)
+        try:
+            user_id = _ensure_member_user_record(conn, member)
+            db.upsert_member_role_snapshot(
+                conn,
+                str(member.guild.id),
+                user_id,
+                str(member.id),
+                member.display_name,
+                primary_role,
+                matched_roles,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    async def _remove_member_snapshot(member: discord.Member) -> None:
+        if member.bot or not member.guild:
+            return
+        conn = db.get_connection(cfg.db_path)
+        try:
+            db.remove_member_role_snapshot(conn, str(member.guild.id), str(member.id))
+            conn.commit()
+        finally:
+            conn.close()
+
+    async def _sync_guild_member_snapshots(guild: discord.Guild) -> int:
+        if not guild.chunked:
+            try:
+                await guild.chunk(cache=True)
+            except discord.HTTPException:
+                pass
+
+        synced_count = 0
+        conn = db.get_connection(cfg.db_path)
+        try:
+            for member in guild.members:
+                if member.bot:
+                    continue
+                primary_role, matched_roles = classify_member_access(member, cfg.roles)
+                user_id = _ensure_member_user_record(conn, member)
+                db.upsert_member_role_snapshot(
+                    conn,
+                    str(guild.id),
+                    user_id,
+                    str(member.id),
+                    member.display_name,
+                    primary_role,
+                    matched_roles,
+                )
+                synced_count += 1
+            conn.commit()
+        finally:
+            conn.close()
+        return synced_count
+
     def _author_can_trigger_intro(message: discord.Message) -> bool:
         author = message.author
         if not isinstance(author, discord.Member):
@@ -307,9 +380,14 @@ def create_bot(cfg) -> commands.Bot:
         await scan_missed_commands(bot, cfg)
         await maybe_auto_sync(bot, cfg)
         await maybe_publish_patch_note(bot, cfg)
+        roster_synced = 0
+        for guild in bot.guilds:
+            roster_synced += await _sync_guild_member_snapshots(guild)
+        logging.getLogger("victor.system").info("Member roster synced | count=%s", roster_synced)
 
     @bot.event
     async def on_member_join(member: discord.Member) -> None:
+        await _sync_member_snapshot(member)
         verify_channel_id = cfg.verify_channel_id
         if not verify_channel_id:
             return
@@ -338,6 +416,18 @@ def create_bot(cfg) -> commands.Bot:
                 await channel.send(content=member.mention, embed=embed)
             except (discord.HTTPException, discord.Forbidden):
                 return
+
+    @bot.event
+    async def on_member_update(before: discord.Member, after: discord.Member) -> None:
+        before_role_ids = sorted(role.id for role in before.roles)
+        after_role_ids = sorted(role.id for role in after.roles)
+        if before_role_ids == after_role_ids and before.display_name == after.display_name:
+            return
+        await _sync_member_snapshot(after)
+
+    @bot.event
+    async def on_member_remove(member: discord.Member) -> None:
+        await _remove_member_snapshot(member)
 
     @bot.event
     async def on_message(message: discord.Message) -> None:

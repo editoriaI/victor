@@ -103,6 +103,7 @@ def verify_success_embed(
     captured: bool = False,
     recognition_note: Optional[str] = None,
     trusted_roles: Optional[List[str]] = None,
+    primary_role: Optional[str] = None,
 ) -> discord.Embed:
     embed = make_embed(
         TITLE_VERIFY,
@@ -112,6 +113,8 @@ def verify_success_embed(
     embed.add_field(name="[USER]", value=user_mention, inline=True)
     embed.add_field(name="[HIGHRISE]", value=highrise_username, inline=True)
     embed.add_field(name="[RESULT]", value="PASS", inline=True)
+    if primary_role:
+        embed.add_field(name="[ROLE]", value=primary_role, inline=True)
     notes: List[str] = []
     if trusted_roles:
         embed.add_field(name="[TRUSTED]", value=", ".join(trusted_roles), inline=True)
@@ -513,6 +516,7 @@ def status_embed(
     code: Optional[str] = None,
     fail_count: Optional[int] = None,
     trusted_roles: Optional[List[str]] = None,
+    primary_role: Optional[str] = None,
     db_status: Optional[str] = None,
     guidance: Optional[str] = None,
 ) -> discord.Embed:
@@ -530,6 +534,8 @@ def status_embed(
     embed.add_field(name="[USER]", value=user_mention, inline=True)
     embed.add_field(name="[VERIFIED]", value=verified, inline=True)
     embed.add_field(name="[HIGHRISE]", value=highrise_username or "NONE", inline=True)
+    if primary_role:
+        embed.add_field(name="[ROLE]", value=primary_role, inline=True)
     if state:
         embed.add_field(name="[STATE]", value=state, inline=True)
     if code:

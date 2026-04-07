@@ -83,6 +83,19 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS member_role_snapshots (
+  guild_id TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  discord_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  primary_role TEXT NOT NULL,
+  matched_roles TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (guild_id, discord_id),
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS command_watch (
   channel_id INTEGER PRIMARY KEY,
   last_message_id INTEGER NOT NULL DEFAULT 0
