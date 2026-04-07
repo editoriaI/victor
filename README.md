@@ -1,6 +1,6 @@
 # Victor - The Undead Intern Discord Bot
 
-Victor is a narrative-embedded Discord bot with a goth-cute undead intern persona. The repo still contains the broader command system, but the live runtime is intentionally parked in sync-only mode while the rest of the command set gets rebuilt.
+Victor is a narrative-embedded Discord bot with a goth-cute undead intern persona. The repo still contains the broader command system, but the live runtime is staged while the rest of the command set gets rebuilt.
 
 ## Quick Start
 
@@ -47,10 +47,25 @@ Or launch a child-mode session directly:
 ## Commands
 
 - `!sync`
+- `!blackmarket list [query]`
+- `!blackmarket add "item name" 25000`
+- `!blackmarket remove <listing_id>`
+- `!purge [lookback]`
 
 ## Slash Commands
 
+- `/help [feature]`
+- `/menu`
+- `/verify`
+- `/status [member]`
+- `/manualverify member highrise_username`
 - `/sync`
+- `/autosync on|off`
+- `/autoverifymode on|off`
+- `/marketlist [query]`
+- `/marketadd item_name price`
+- `/marketremove listing_id`
+- `/purge lookback`
 
 ## Notes
 
@@ -58,7 +73,8 @@ Or launch a child-mode session directly:
 - The bot stores data in `db/victor.db`.
 - Errors are returned as URGENT embeds.
 - By default, Victor watches `bot/`, `config/`, `.env`, `requirements.txt`, and `db/schema.sql` and restarts when those files change.
-- `!sync` and `/sync` are the only active commands right now.
+- `!sync`, `!blackmarket ...`, and `!purge` are active right now.
+- `/help`, `/menu`, `/verify`, `/status`, `/manualverify`, `/sync`, `/autosync`, `/autoverifymode`, `/marketlist`, `/marketadd`, `/marketremove`, and `/purge` are active right now.
 - The parked command inventory lives in `docs/command-rebuild-reference.md`.
 - The underlying cogs for verification, marketplace, matchmaking, and help are still in the repo as rebuild reference, but they are not loaded by `bot/main.py`.
 - Child process logs stay quiet in the console and write detailed command activity to `logs/victor-child.log`.

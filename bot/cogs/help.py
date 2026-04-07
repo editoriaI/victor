@@ -1,6 +1,7 @@
 from typing import Callable, Optional
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from bot import db, embeds
@@ -17,27 +18,36 @@ HELP_OPTIONS = (
 )
 
 
-
-
-
-
-
 def build_menu_embed(cfg: Config) -> discord.Embed:
     verify_lane = f"<#{cfg.verify_channel_id}>" if cfg.verify_channel_id else "the hr-id lane"
     embed = embeds.make_embed(
         f"{embeds.TITLE_HELP} // MENU",
-        "Victor's live lanes are listed below. Tap a button to get the matching lane details instantly.",
+        "Victor's console now feels like an X status, so every button is a pointer into the next plot point.",
         embeds.COLOR_NEUTRAL,
     )
-    embed.add_field(name="[LIVE COMMANDS]", value="`!verify`, `!status`, `!manualverify`, `!sync`, `!autoverifymode on|off`", inline=False)
-    embed.add_field(name="[VERIFY LANE]", value=f"Run intake and status checks inside {verify_lane}.", inline=False)
-    embed.add_field(name="[AUTO MODE]", value="`!autoverifymode on` lets Victor auto-approve, `off` keeps staff in the loop.", inline=False)
     embed.add_field(
-        name="[FORCE SYNC]",
-        value="Hit the `Sync` button to force a slash-tree refresh (admin-only). Victor will post the result back to this channel as an embed.",
+        name="[VERIFY QUEUE]",
+        value=(
+            f"Run `!verify` inside {verify_lane} to open the intake thread, drop your Highrise handle, "
+            "then watch the console post the approval/rejection feed."
+        ),
         inline=False,
     )
-    embed.add_field(name="[NAVIGATION]", value="Use the buttons to drop straight into a topic without typing.", inline=False)
+    embed.add_field(
+        name="[STATUS DESK]",
+        value="Tap Status to open a submenu with `!status`, the admin snapshot, and the Send Note modal.",
+        inline=False,
+    )
+    embed.add_field(
+        name="[AUTO MODES]",
+        value="The Auto menu explains `!autoverifymode on|off` and `!autosync on|off` so Victor keeps pace.",
+        inline=False,
+    )
+    embed.add_field(
+        name="[PATCH & CONSOLE]",
+        value="Victor posts updates to the console channel. Use Sync to resync slash commands, and keep the log clean.",
+        inline=False,
+    )
     return embed
 
 
@@ -47,12 +57,12 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         "mod": "admin",
         "restart": "admin",
         "owner": "admin",
-        "market": "parked",
-        "bm": "parked",
-        "listings": "parked",
-        "marketlist": "parked",
-        "marketadd": "parked",
-        "marketremove": "parked",
+        "market": "blackmarket",
+        "bm": "blackmarket",
+        "listings": "blackmarket",
+        "marketlist": "blackmarket",
+        "marketadd": "blackmarket",
+        "marketremove": "blackmarket",
         "trade": "parked",
         "match": "parked",
         "matches": "parked",
@@ -60,10 +70,11 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         "decline": "parked",
         "cancel": "parked",
         "cancelrequest": "parked",
-        "blackmarket": "parked",
+        "blackmarket": "blackmarket",
         "matchmaking": "parked",
         "autoverify": "autoverifymode",
-        "autoverifymode": "autoverifymode",
+        "autosync": "autosync",
+        "auto sync": "autosync",
     }
     topic = aliases.get(topic, topic)
 
@@ -73,27 +84,19 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "verify":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // VERIFY",
-            "verify opens an intake thread, collects a Highrise username, and sends it to staff for approval before logging.",
+            "[ INTAKE THREAD OPENED ]\nStay still. Victor only needs your Highrise username. Keep it clean, keep it exact. "
+            "This record is permanent. Staff will keep the console posted.",
             embeds.COLOR_NEUTRAL,
         )
-        embed.add_field(
-            name="[TEXT]",
-            value="!verify",
-            inline=False,
-        )
+        embed.add_field(name="[TEXT]", value="!verify (run inside the hr-id lane)", inline=False)
         embed.add_field(
             name="[FLOW]",
-            value=(
-                "phase 01: victor opens intake.\n"
-                "phase 02: the member submits their HR username in the prompt.\n"
-                "phase 03: victor posts it to staff with accept or reject buttons.\n"
-                "phase 04: staff approval files it, updates nickname when possible, and closes the file."
-            ),
+            value="1. Open intake. 2. Submit the Highrise handle. 3. Staff reviews the bio code. 4. Victor logs or returns it.",
             inline=False,
         )
         embed.add_field(
             name="[NOTES]",
-            value="run this in the server's hr-id lane. members can run their own intake there, staff signs off in the console, and manualverify still exists for corrections or overrides.",
+            value="Wait for the console post, then add the code to your bio and hit the confirm button when ready.",
             inline=False,
         )
         return embed
@@ -101,18 +104,18 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "status":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // STATUS",
-            "status shows whether your intake is pending, needs a retry, or has already been logged.",
+            "[ STATUS: LOGGED ]\nSee whether your intake is pending, waiting for staff, or already engraved on file.",
             embeds.COLOR_NEUTRAL,
         )
-        embed.add_field(name="[TEXT]", value="!status\n!status @user", inline=False)
+        embed.add_field(name="[TEXT]", value="!status or !status @user", inline=False)
         embed.add_field(
-            name="[RETURNS]",
-            value="status shows whether your intake is pending, needs a retry, or has already been logged.",
+            name="[GUIDANCE]",
+            value="If Victor says 'No intake', rerun `!verify` inside the hr-id lane and resend the username.",
             inline=False,
         )
         embed.add_field(
-            name="[NOTES]",
-            value="use status in the hr-id lane. verifier or Victor Admin is required to inspect someone else.",
+            name="[ADMIN]",
+            value="Admins use the submenu to check counts, send notes, and keep the inks clean.",
             inline=False,
         )
         return embed
@@ -120,18 +123,13 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "manualverify":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // MANUAL",
-            "manualverify allows staff to override, correct, or directly log a username.",
+            "[ MANUAL OVERRIDE ACCEPTED ]\nStaff can grab a user, correct the username, and seal the verification.",
             embeds.COLOR_NEUTRAL,
         )
-        embed.add_field(name="[TEXT]", value="!manualverify @user [username]", inline=False)
+        embed.add_field(name="[TEXT]", value="!manualverify @user username", inline=False)
         embed.add_field(
-            name="[WHEN TO USE IT]",
-            value="use it when staff needs to correct a username on file, finish a stuck case, or override the intake manually.",
-            inline=False,
-        )
-        embed.add_field(
-            name="[NOTES]",
-            value="Verifier or Victor Admin only. use the staff thread receipts before you stamp a pass.",
+            name="[WHEN]",
+            value="Use it when the automated checks keep failing or you have to nudge the intake forward.",
             inline=False,
         )
         return embed
@@ -139,18 +137,46 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "sync":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // SYNC",
-            "sync refreshes Victor's command registry when Discord starts acting unstable.",
+            "[ SYNC COMPLETE ✔ ]\nUse this if Discord hides slash commands or the menu misfires. Victor will refresh the tree.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[TEXT]", value="!sync", inline=False)
+        embed.add_field(name="[NOTES]", value="Victor Admin only. The menu Sync button runs this path for you.", inline=False)
+        return embed
+
+    if topic == "blackmarket":
+        embed = embeds.make_embed(
+            f"{embeds.TITLE_HELP} // BLACKMARKET",
+            "[ MARKET LANE LIVE ]\nVictor can browse, add, and remove blackmarket listings again while the rest of the trade deck stays staged.",
+            embeds.COLOR_NEUTRAL,
+        )
         embed.add_field(
-            name="[WHEN TO USE IT]",
-            value="after deploys, after command reloads, or when staff crash threads specifically tell you the command registry needs a refresh.",
+            name="[TEXT]",
+            value="!blackmarket list [query] | !blackmarket add \"item\" 25000 | !blackmarket remove <listing_id>",
             inline=False,
         )
         embed.add_field(
+            name="[SLASH]",
+            value="/marketlist [query] | /marketadd item_name price | /marketremove listing_id",
+            inline=False,
+        )
+        embed.add_field(
+            name="[ACCESS]",
+            value="Browsing is open. Creating and removing listings still requires Blackmarket or admin clearance.",
+            inline=False,
+        )
+        return embed
+
+    if topic == "autosync":
+        embed = embeds.make_embed(
+            f"{embeds.TITLE_HELP} // AUTO SYNC",
+            "[ AUTO SYNC ENABLED ]\nVictor will automatically rerun `!sync` during startup when this is on.",
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(name="[TEXT]", value="!autosync on|off", inline=False)
+        embed.add_field(
             name="[NOTES]",
-            value="Victor Admin only. this does not re-enable parked features by itself.",
+            value="`on` resyncs the slash tree each time the bot boots. `off` keeps CTRL over the deploy.",
             inline=False,
         )
         return embed
@@ -158,18 +184,13 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "autoverifymode":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // AUTO VERIFY",
-            "autoverifymode lets admins toggle Victor's auto-approval logic for new intake threads.",
+            "[ AUTO VERIFY ENABLED ]\nToggle Victor's auto-approval gate so clean usernames skip staff review or not.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[TEXT]", value="!autoverifymode on|off", inline=False)
         embed.add_field(
             name="[BEHAVIOR]",
-            value="`on` lets Victor auto-approve clean usernames. `off` forces staff review via the console post.",
-            inline=False,
-        )
-        embed.add_field(
-            name="[NOTES]",
-            value="Staff still reviews the console intake post when auto verify is disabled.",
+            value="`on` lets Victor approve once the username passes the basic checklist. `off` keeps staff in the loop.",
             inline=False,
         )
         return embed
@@ -177,121 +198,53 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
     if topic == "parked":
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // PARKED",
-            "these features are still offstage while victor comes back online in pieces.",
+            "These features remain parked while the rest of the deck rebuilds. Blackmarket is live again; matchmaking and restart still need a proper pass.",
             embeds.COLOR_NEUTRAL,
         )
-        embed.add_field(
-            name="[PARKED TEXT]",
-            value=(
-                '!blackmarket list [query]\n'
-                '!blackmarket add "item" 25000\n'
-                '!blackmarket remove <listing_id>\n'
-                '!request "item" 25000\n'
-                '!cancel <request_id>\n'
-                '!accept <match_id>\n'
-                '!decline <match_id>'
-            ),
-            inline=False,
-        )
-        embed.add_field(
-            name="[NOTES]",
-            value="help can document them, but victor cannot run them live yet. verify and admin are the active lanes right now.",
-            inline=False,
-        )
+        embed.add_field(name="[PARKED TEXT]", value="!request | !cancel | !accept | !decline | !restart", inline=False)
         return embed
 
     if topic in {"admin", "blacklist"}:
         embed = embeds.make_embed(
             f"{embeds.TITLE_HELP} // ADMIN",
-            "restricted moderation controls and recovery tools.",
+            "Restricted moderation utilities for staff.",
             embeds.COLOR_NEUTRAL,
         )
-        embed.add_field(
-            name="[TEXT]",
-            value="!sync\n!manualverify @user [username]\n!status @user",
-            inline=False,
-        )
-        embed.add_field(
-            name="[NOTES]",
-            value="Victor Admin handles sync. Verifier or Victor Admin can finish a manual verify. The HBIC owner role bypasses every role gate.",
-            inline=False,
-        )
-        embed.add_field(
-            name="[POST CODES]",
-            value=(
-                "`1001` child online\n"
-                "`1101` restart requested\n"
-                "`1102` restart complete\n"
-                "`20xx` text command success\n"
-                "`24xx` text command failure\n"
-                "`90xx` staff crash thread\n"
-                "`9101` verify manual review\n"
-                "`9102` verify intake is waiting for staff approval"
-            ),
-            inline=False,
-        )
+        embed.add_field(name="[TEXT]", value="!sync, !purge, !manualverify @user [username], !status @user", inline=False)
+        embed.add_field(name="[NOTES]", value="HBIC owner bypasses every gate. Sync button re-syncs commands.", inline=False)
         return embed
 
-    embed = embeds.urgent_embed(
-        "HELP",
-        "Unknown help topic. Try verify, status, manualverify, sync, admin, or parked.",
-    )
-    embed.add_field(
-        name="[USAGE]",
-        value="!help verify\n!help status\n!help manualverify\n!help sync\n!help parked",
-        inline=False,
-    )
-    return embed
+    return embeds.urgent_embed("HELP", "Unknown help topic. Try verify, status, manualverify, sync, blackmarket, admin, or parked.")
 
 
-class HelpTopicSelect(discord.ui.Select):
-    def __init__(self, topic_builder: Callable[[Optional[str]], discord.Embed]) -> None:
-        self.topic_builder = topic_builder
-        options = [
-            discord.SelectOption(label=label, value=value, description=description)
-            for value, label, description in HELP_OPTIONS
-        ]
-        super().__init__(
-            placeholder="pick a thread to open",
-            min_values=1,
-            max_values=1,
-            options=options,
+class SendNoteModal(discord.ui.Modal):
+    def __init__(self, help_cog: "HelpCog") -> None:
+        super().__init__(title="Victor // Staff Note")
+        self.help_cog = help_cog
+        self.target_user = discord.ui.TextInput(label="Target Member mention or ID", placeholder="@member", required=True)
+        self.note = discord.ui.TextInput(label="Note", style=discord.TextStyle.long, placeholder="What should Victor deliver to them?", required=True)
+        self.add_item(self.target_user)
+        self.add_item(self.note)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.help_cog.handle_send_note(interaction, str(self.target_user), str(self.note))
+
+
+class ManualVerifyModal(discord.ui.Modal):
+    def __init__(self, help_cog: "HelpCog") -> None:
+        super().__init__(title="Victor // Manual Verify")
+        self.help_cog = help_cog
+        self.target_user = discord.ui.TextInput(label="Target Member mention or ID", placeholder="@member", required=True)
+        self.highrise_username = discord.ui.TextInput(label="Highrise username", placeholder="username", required=True)
+        self.add_item(self.target_user)
+        self.add_item(self.highrise_username)
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        await self.help_cog.handle_manual_verify_modal(
+            interaction,
+            str(self.target_user),
+            str(self.highrise_username),
         )
-
-    async def callback(self, interaction: discord.Interaction) -> None:
-        embed = self.topic_builder(self.values[0])
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-class HelpView(discord.ui.View):
-    def __init__(self, topic_builder: Callable[[Optional[str]], discord.Embed]) -> None:
-        super().__init__(timeout=180)
-        self.topic_builder = topic_builder
-        self.add_item(HelpTopicSelect(topic_builder))
-
-    async def _send_topic(self, interaction: discord.Interaction, topic: str) -> None:
-        embed = self.topic_builder(topic)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @discord.ui.button(label="Verify", style=discord.ButtonStyle.secondary, emoji="🕯️")
-    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "verify")
-
-    @discord.ui.button(label="Status", style=discord.ButtonStyle.secondary, emoji="🖤")
-    async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "status")
-
-    @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary, emoji="📎")
-    async def manual_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "manualverify")
-
-    @discord.ui.button(label="Sync", style=discord.ButtonStyle.secondary, emoji="📟")
-    async def sync_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "sync")
-
-    @discord.ui.button(label="Parked", style=discord.ButtonStyle.secondary, emoji="🦇")
-    async def parked_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "parked")
 
 
 class StatusSubMenu(discord.ui.View):
@@ -314,7 +267,7 @@ class StatusSubMenu(discord.ui.View):
     async def admin_overview(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         author = interaction.user
         if not isinstance(author, discord.Member) or not self.help_cog._is_admin_member(author):
-            await self._send_notice(interaction, "You do not have the clearance to see the admin snapshot.")
+            await self._send_notice(interaction, "You do not have clearance for the admin snapshot.")
             return
         counts = self.help_cog._verification_counts()
         embed = embeds.make_embed(
@@ -331,11 +284,32 @@ class StatusSubMenu(discord.ui.View):
 
     @discord.ui.button(label="Send Note", style=discord.ButtonStyle.secondary, emoji="📗")
     async def send_note(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        guidance = (
-            "Mention the member or role, check the file with `!status @user`, "
-            "then follow up with `!manualverify @user username` or a written staff note."
-        )
-        await self._send_notice(interaction, guidance)
+        await interaction.response.send_modal(SendNoteModal(self.help_cog))
+
+
+class AutoModeSubMenu(discord.ui.View):
+    def __init__(self, help_cog: "HelpCog") -> None:
+        super().__init__(timeout=180)
+        self.help_cog = help_cog
+
+    def _admin_cog(self, interaction: discord.Interaction):
+        return interaction.client.get_cog("AdminCog")
+
+    @discord.ui.button(label="Auto Verify", style=discord.ButtonStyle.secondary, emoji="🧿")
+    async def auto_verify(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        admin_cog = self._admin_cog(interaction)
+        if admin_cog is None:
+            await interaction.response.send_message("Victor misplaced the admin desk.", ephemeral=True)
+            return
+        await admin_cog.handle_auto_verify_toggle(interaction, not admin_cog._is_auto_verify_enabled())
+
+    @discord.ui.button(label="Auto Sync", style=discord.ButtonStyle.secondary, emoji="🛰️")
+    async def auto_sync(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        admin_cog = self._admin_cog(interaction)
+        if admin_cog is None:
+            await interaction.response.send_message("Victor misplaced the admin desk.", ephemeral=True)
+            return
+        await admin_cog.handle_auto_sync_toggle(interaction, not admin_cog._is_auto_sync_enabled())
 
 
 class MenuView(discord.ui.View):
@@ -348,40 +322,68 @@ class MenuView(discord.ui.View):
         embed = self.topic_builder(topic)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    async def _send_notice(self, interaction: discord.Interaction, text: str) -> None:
-        await interaction.response.send_message(text, ephemeral=True)
+    def _verify_cog(self, interaction: discord.Interaction):
+        return interaction.client.get_cog("VerifyCog")
+
+    def _admin_cog(self, interaction: discord.Interaction):
+        return interaction.client.get_cog("AdminCog")
+
+    def _market_cog(self, interaction: discord.Interaction):
+        return interaction.client.get_cog("BlackmarketCog")
 
     @discord.ui.button(label="Verify", style=discord.ButtonStyle.primary, emoji="🛡️")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "verify")
+        verify_cog = self._verify_cog(interaction)
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the verification file.", ephemeral=True)
+            return
+        await verify_cog.handle_menu_verify_button(interaction)
 
     @discord.ui.button(label="Status", style=discord.ButtonStyle.secondary, emoji="🖤")
     async def status_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        verify_cog = self._verify_cog(interaction)
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the verification file.", ephemeral=True)
+            return
+        await verify_cog.handle_menu_status_button(interaction)
+
+    @discord.ui.button(label="Auto Modes", style=discord.ButtonStyle.secondary, emoji="🧿")
+    async def auto_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await interaction.response.send_message(
-            "Status desk incoming.",
-            view=StatusSubMenu(self.help_cog),
+            "Auto toggles to keep Victor leaning into the correct flow.",
+            view=AutoModeSubMenu(self.help_cog),
             ephemeral=True,
         )
 
-    @discord.ui.button(label="Auto Verify", style=discord.ButtonStyle.secondary, emoji="🚚")
-    async def auto_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "autoverifymode")
-
     @discord.ui.button(label="Manual", style=discord.ButtonStyle.secondary, emoji="📎")
     async def manual_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await self._send_topic(interaction, "manualverify")
+        verify_cog = self._verify_cog(interaction)
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the verification file.", ephemeral=True)
+            return
+        await interaction.response.send_modal(ManualVerifyModal(self.help_cog))
 
     @discord.ui.button(label="Sync", style=discord.ButtonStyle.secondary, emoji="📟")
     async def sync_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        admin_cog = interaction.client.get_cog("AdminCog")
+        admin_cog = self._admin_cog(interaction)
         if admin_cog is None:
-            await self._send_notice(interaction, "Victor misplaced the admin desk.")
+            await interaction.response.send_message("Victor misplaced the admin desk.", ephemeral=True)
             return
         await admin_cog.handle_console_sync_button(interaction)
+
+    @discord.ui.button(label="Market", style=discord.ButtonStyle.secondary, emoji="💰")
+    async def market_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        market_cog = self._market_cog(interaction)
+        if market_cog is None:
+            await interaction.response.send_message("Victor misplaced the market file.", ephemeral=True)
+            return
+        await market_cog.handle_market_list_menu_button(interaction)
 
     @discord.ui.button(label="Parked", style=discord.ButtonStyle.secondary, emoji="🦇")
     async def parked_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         await self._send_topic(interaction, "parked")
+
+
 class HelpCog(commands.Cog):
     def __init__(self, bot: commands.Bot, cfg: Config) -> None:
         self.bot = bot
@@ -402,14 +404,53 @@ class HelpCog(commands.Cog):
             conn.close()
         total = sum(row["count"] for row in rows)
         counts = {row["status"]: row["count"] for row in rows}
-        verified = sum(
-            counts.get(status, 0)
-            for status in ("VERIFIED", "USERNAME LOGGED", "LOGGED", "PASS")
-        )
+        verified = sum(counts.get(status, 0) for status in ("VERIFIED", "USERNAME LOGGED", "LOGGED"))
         pending = counts.get("PENDING", 0)
         rejected = counts.get("REJECTED", 0)
         other = total - verified - pending - rejected
         return {"verified": verified, "pending": pending, "rejected": rejected, "other": max(other, 0), "total": total}
+
+    async def handle_send_note(
+        self,
+        interaction: discord.Interaction,
+        target: str,
+        note: str,
+    ) -> None:
+        embed = embeds.make_embed(
+            f"{embeds.TITLE_ADMIN} // STAFF NOTE",
+            note,
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(name="[TARGET]", value=target, inline=True)
+        embed.add_field(name="[AUTHOR]", value=interaction.user.mention, inline=True)
+        channel_id = self.cfg.verify_channel_id or self.cfg.log_channel_id
+        if channel_id:
+            channel = interaction.client.get_channel(channel_id)
+            if channel is None:
+                try:
+                    channel = await interaction.client.fetch_channel(channel_id)
+                except (discord.HTTPException, discord.Forbidden, discord.NotFound):
+                    channel = None
+            if channel:
+                await channel.send(embed=embed)
+        await interaction.response.send_message("Note posted.", ephemeral=True)
+
+    async def handle_manual_verify_modal(
+        self,
+        interaction: discord.Interaction,
+        target: str,
+        highrise_username: str,
+    ) -> None:
+        verify_cog = interaction.client.get_cog("VerifyCog")
+        if verify_cog is None:
+            await interaction.response.send_message("Victor misplaced the verification file.", ephemeral=True)
+            return
+        await verify_cog.handle_manual_verify_request(
+            interaction,
+            target,
+            highrise_username,
+            source="menu_manual",
+        )
 
     def _topic_embed(self, feature: Optional[str]) -> discord.Embed:
         return build_help_topic_embed(feature)
@@ -420,13 +461,26 @@ class HelpCog(commands.Cog):
     @commands.command(name="help")
     async def help_command(self, ctx: commands.Context, *, feature: Optional[str] = None) -> None:
         embed = self._topic_embed(feature)
-        view = HelpView(self._topic_embed) if not feature else None
-        await ctx.send(embed=embed, view=view)
-
+        await ctx.send(embed=embed)
 
     @commands.command(name="menu")
     async def menu_command(self, ctx: commands.Context) -> None:
         await ctx.send(embed=self._menu_embed(), view=MenuView(self._topic_embed, self))
+
+    @app_commands.command(name="help", description="Open Victor's help desk for the live lanes.")
+    @app_commands.describe(feature="Optional topic like verify, status, sync, or blackmarket")
+    @app_commands.guild_only()
+    async def help_slash(self, interaction: discord.Interaction, feature: Optional[str] = None) -> None:
+        await interaction.response.send_message(embed=self._topic_embed(feature), ephemeral=True)
+
+    @app_commands.command(name="menu", description="Open Victor's command board.")
+    @app_commands.guild_only()
+    async def menu_slash(self, interaction: discord.Interaction) -> None:
+        await interaction.response.send_message(
+            embed=self._menu_embed(),
+            view=MenuView(self._topic_embed, self),
+            ephemeral=True,
+        )
 
 
 async def setup(bot: commands.Bot) -> None:

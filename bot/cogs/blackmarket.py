@@ -46,6 +46,38 @@ class BlackmarketCog(commands.Cog):
             return
         await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
 
+    async def _send_market_list_interaction(
+        self,
+        interaction: discord.Interaction,
+        *,
+        query: Optional[str] = None,
+        ephemeral: bool = True,
+    ) -> None:
+        author = interaction.user
+        if not isinstance(author, discord.Member):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Blackmarket"), ephemeral=ephemeral)
+            return
+
+        author_blacklist = self._blacklist_record(str(author.id))
+        if author_blacklist and not self._is_admin(author):
+            await self._send_interaction_embed(
+                interaction,
+                embeds.blacklisted_embed(author_blacklist.get("reason")),
+                ephemeral=ephemeral,
+            )
+            return
+
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            listings = db.list_listings(conn, item_query=query if query else None)
+        finally:
+            conn.close()
+
+        await self._send_interaction_embed(interaction, embeds.listings_embed(listings), ephemeral=ephemeral)
+
+    async def handle_market_list_menu_button(self, interaction: discord.Interaction) -> None:
+        await self._send_market_list_interaction(interaction, ephemeral=True)
+
     @commands.group(name="blackmarket", invoke_without_command=True)
     async def blackmarket(self, ctx: commands.Context) -> None:
         embed = embeds.invalid_usage_embed("!blackmarket list | add | remove")
@@ -150,25 +182,7 @@ class BlackmarketCog(commands.Cog):
     async def market_list_slash(
         self, interaction: discord.Interaction, query: Optional[str] = None
     ) -> None:
-        author = interaction.user
-        if not isinstance(author, discord.Member):
-            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Blackmarket"))
-            return
-
-        author_blacklist = self._blacklist_record(str(author.id))
-        if author_blacklist and not self._is_admin(author):
-            await self._send_interaction_embed(
-                interaction, embeds.blacklisted_embed(author_blacklist.get("reason"))
-            )
-            return
-
-        conn = db.get_connection(self.cfg.db_path)
-        try:
-            listings = db.list_listings(conn, item_query=query if query else None)
-        finally:
-            conn.close()
-
-        await self._send_interaction_embed(interaction, embeds.listings_embed(listings))
+        await self._send_market_list_interaction(interaction, query=query, ephemeral=True)
 
     @app_commands.command(name="marketadd", description="Create a blackmarket listing.")
     @app_commands.describe(item_name="Item to list", price="Listing price")

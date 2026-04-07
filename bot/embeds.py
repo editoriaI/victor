@@ -724,8 +724,9 @@ def help_embed() -> discord.Embed:
     )
     embed.add_field(name="[MENU]", value="!menu", inline=True)
     embed.add_field(name="[VERIFY]", value="!verify, !manualverify, !status", inline=True)
-    embed.add_field(name="[ADMIN]", value="!sync", inline=True)
-    embed.add_field(name="[PARKED]", value="blackmarket, matchmaking, restart", inline=True)
+    embed.add_field(name="[ADMIN]", value="!sync, !purge", inline=True)
+    embed.add_field(name="[MARKET]", value="!blackmarket list, add, remove", inline=True)
+    embed.add_field(name="[PARKED]", value="matchmaking, restart", inline=True)
     embed.add_field(
         name="[VERIFY FLOW]",
         value="`verify` opens intake, collects the member's Highrise username, and stores it on file. `manualverify` stays available for staff corrections or overrides.",
@@ -733,7 +734,7 @@ def help_embed() -> discord.Embed:
     )
     embed.add_field(
         name="[DEEP HELP]",
-        value="!menu | !help verify | !help status | !help sync | !help parked",
+        value="!menu | !help verify | !help status | !help sync | !help blackmarket | !help parked",
         inline=False,
     )
     embed.add_field(name="[MENU]", value="Use the select menu or the quick buttons below.", inline=False)

@@ -48,6 +48,21 @@ def _staff_code(issue: Optional[str], *, command_name: Optional[str] = None) -> 
     return 9999
 
 
+async def _send_interaction_text(
+    interaction: discord.Interaction,
+    content: str,
+    *,
+    ephemeral: bool = True,
+) -> None:
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(content, ephemeral=ephemeral)
+            return
+        await interaction.response.send_message(content, ephemeral=ephemeral)
+    except (discord.HTTPException, discord.NotFound):
+        return
+
+
 def build_staff_attention_embed(
     title: str,
     description: str,
@@ -128,7 +143,7 @@ def infer_command_fix(command_name: str, details: Optional[str]) -> Tuple[str, O
             "sync",
         )
     return (
-        "Check the receipts, retry once, and use Apply Fix only when a resync is actually safe for this failure.",
+        "Check the receipts and decide whether this needs a manual pass. There is no safe one-tap fix attached to this crash thread.",
         None,
     )
 
@@ -145,11 +160,11 @@ class CommandAttentionView(discord.ui.View):
     )
     async def quick_fix_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not interaction.message or not interaction.message.embeds:
-            await interaction.response.send_message("Victor misplaced the crash notes.", ephemeral=True)
+            await _send_interaction_text(interaction, "Victor misplaced the crash notes.")
             return
         embed = interaction.message.embeds[0]
         quick_fix = _field_value(embed, "Quick Fix") or "No quick fix was attached to this thread. Cute."
-        await interaction.response.send_message(quick_fix, ephemeral=True)
+        await _send_interaction_text(interaction, quick_fix)
 
     @discord.ui.button(
         label="Apply Fix",
@@ -159,35 +174,32 @@ class CommandAttentionView(discord.ui.View):
     )
     async def apply_fix_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
         if not interaction.message or not interaction.message.embeds:
-            await interaction.response.send_message("Victor misplaced the crash notes.", ephemeral=True)
+            await _send_interaction_text(interaction, "Victor misplaced the crash notes.")
             return
 
         embed = interaction.message.embeds[0]
         action = (_field_value(embed, "Apply Fix") or "").strip().casefold()
         if not action or action == "none":
-            await interaction.response.send_message(
+            await _send_interaction_text(
+                interaction,
                 "[ NO AUTO-FIX ]\n\nThere is no safe shortcut here.\n\nA real person needs to step in.\nUnfortunate, I know.",
-                ephemeral=True,
             )
             return
 
         admin_cog = interaction.client.get_cog("AdminCog")
         if admin_cog is None:
-            await interaction.response.send_message("Victor misplaced his admin desk.", ephemeral=True)
+            await _send_interaction_text(interaction, "Victor misplaced his admin desk.")
             return
-        if action == "sync":
-            await admin_cog.handle_console_sync_button(interaction)
+        handled = await admin_cog.handle_apply_fix_action(interaction, action)
+        if handled:
             return
         if action == "restart":
-            await interaction.response.send_message(
+            await _send_interaction_text(
+                interaction,
                 "Restart is disabled right now. We are in sync-only mode while the command set gets rebuilt.",
-                ephemeral=True,
             )
             return
-        await interaction.response.send_message(
-            f"Victor does not know how to auto-apply `{action}` yet.",
-            ephemeral=True,
-        )
+        await _send_interaction_text(interaction, f"Victor does not know how to auto-apply `{action}` yet.")
 
 
 class VerifyReviewView(discord.ui.View):
@@ -277,6 +289,7 @@ async def send_command_attention_post(
 ) -> None:
     location_value = "direct messages" if location == "dm" else (f"guild {location}" if location else None)
     command_label = f"/{command_name}" if surface == "slash" else f"!{command_name}"
+    quick_fix_text, apply_fix_action = infer_command_fix(command_name, details)
     embed = build_staff_attention_embed(
         "📟 Command Attention",
         "[ COMMAND FAILURE ]\n\nThat command collapsed mid-execution.\n\nStaff may want to investigate\nbefore it develops personality.",
@@ -290,11 +303,13 @@ async def send_command_attention_post(
         next_move="check receipts, decide whether this is a one-off wobble or a real blocker, then use the buttons if the fix is safe.",
         quick_fix=(
             "[ QUICK FIX AVAILABLE ]\n\nHere's the fastest stable correction.\n\n"
-            f"{infer_command_fix(command_name, details)[0]}"
-        ),
-        apply_fix=infer_command_fix(command_name, details)[1],
+            f"{quick_fix_text}"
+        )
+        if apply_fix_action
+        else None,
+        apply_fix=apply_fix_action,
     )
-    await send_log_channel(bot, cfg, embed=embed, view=CommandAttentionView())
+    await send_log_channel(bot, cfg, embed=embed, view=CommandAttentionView() if apply_fix_action else None)
 
 
 async def send_verify_review_post(

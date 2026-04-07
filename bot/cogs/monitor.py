@@ -41,7 +41,6 @@ class MonitorCog(commands.Cog):
             ctx.command.qualified_name if ctx.command else "unknown",
             str(ctx.guild.id) if ctx.guild else "dm",
             details=ctx.message.content,
-            publish_to_channel=False,
         )
 
     @commands.Cog.listener()

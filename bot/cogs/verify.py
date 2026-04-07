@@ -2,6 +2,7 @@ import logging
 from typing import List, Optional
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from bot import db
@@ -395,6 +396,12 @@ class VerifyCog(commands.Cog):
         if not value or any(char.isspace() for char in value):
             return None
         return value
+
+    def _extract_member_id_from_text(self, raw_value: str) -> Optional[int]:
+        cleaned = (raw_value or "").strip().replace("<@", "").replace("!", "").replace(">", "")
+        if not cleaned.isdigit():
+            return None
+        return int(cleaned)
 
     async def _resolve_target_member(
         self,
@@ -810,6 +817,71 @@ class VerifyCog(commands.Cog):
             return
         await self._send_interaction_embed(interaction, self._build_status_embed(actor, payload), ephemeral=True)
 
+    async def _send_status_interaction(
+        self,
+        interaction: discord.Interaction,
+        target: discord.Member,
+        *,
+        ephemeral: bool = True,
+    ) -> None:
+        payload = self._status_payload(target)
+        if not payload:
+            await self._send_interaction_embed(interaction, embeds.verify_missing_record_embed(target.mention), ephemeral=ephemeral)
+            return
+        await self._send_interaction_embed(interaction, self._build_status_embed(target, payload), ephemeral=ephemeral)
+
+    async def handle_manual_verify_request(
+        self,
+        interaction: discord.Interaction,
+        target_text: str,
+        raw_username: str,
+        *,
+        source: str,
+    ) -> None:
+        if not interaction.guild:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member) or not self._can_manage_verification(actor):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
+            return
+
+        member_id = self._extract_member_id_from_text(target_text)
+        if not member_id:
+            await self._send_interaction_embed(
+                interaction,
+                embeds.invalid_usage_embed("Manual verify needs a member mention or raw Discord ID."),
+            )
+            return
+
+        username = self._normalize_highrise_username(raw_username)
+        if not username:
+            await self._send_interaction_embed(
+                interaction,
+                embeds.invalid_usage_embed("Manual verify needs a clean Highrise username."),
+            )
+            return
+
+        await self._defer_interaction(interaction, ephemeral=True)
+
+        target = interaction.guild.get_member(member_id)
+        if target is None:
+            try:
+                target = await interaction.guild.fetch_member(member_id)
+            except discord.HTTPException:
+                await self._send_interaction_embed(interaction, embeds.not_found_embed(str(member_id)))
+                return
+
+        embed = await self._approve_highrise_username(
+            str(actor.id),
+            target,
+            username,
+            source=source,
+            manual=True,
+        )
+        await self._send_interaction_embed(interaction, embed, ephemeral=True)
+
     async def handle_console_manual_verify_button(self, interaction: discord.Interaction) -> None:
         if not interaction.guild or not interaction.message or not interaction.message.embeds:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
@@ -986,6 +1058,80 @@ class VerifyCog(commands.Cog):
             manual=True,
         )
         await ctx.send(embed=embed)
+
+    @app_commands.command(name="verify", description="Open Victor's verification intake.")
+    @app_commands.guild_only()
+    async def verify_slash(self, interaction: discord.Interaction) -> None:
+        await self.handle_menu_verify_button(interaction)
+
+    @app_commands.command(name="status", description="Check your current verification status.")
+    @app_commands.describe(member="Optional member to inspect")
+    @app_commands.guild_only()
+    async def status_slash(
+        self,
+        interaction: discord.Interaction,
+        member: Optional[discord.Member] = None,
+    ) -> None:
+        if not interaction.guild:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
+            return
+
+        target = member or actor
+        if member and member.id != actor.id and not self._can_view_others(actor):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
+            return
+
+        author_blacklist = self._blacklist_record(str(actor.id))
+        if author_blacklist and not self._is_admin(actor):
+            await self._send_interaction_embed(interaction, embeds.blacklisted_embed(author_blacklist.get("reason")))
+            return
+
+        await self._send_status_interaction(interaction, target, ephemeral=True)
+
+    @app_commands.command(name="manualverify", description="Staff override to log a Highrise username.")
+    @app_commands.describe(member="Member to verify", highrise_username="Highrise username to file")
+    @app_commands.guild_only()
+    async def manual_verify_slash(
+        self,
+        interaction: discord.Interaction,
+        member: discord.Member,
+        highrise_username: Optional[str] = None,
+    ) -> None:
+        if not interaction.guild:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member) or not self._can_manage_verification(actor):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
+            return
+
+        username = self._normalize_highrise_username(highrise_username or self._existing_username(member) or "")
+        if not username:
+            await self._send_interaction_embed(
+                interaction,
+                embeds.invalid_usage_embed("/manualverify member highrise_username"),
+            )
+            return
+
+        await self._defer_interaction(interaction, ephemeral=True)
+        embed = await self._approve_highrise_username(
+            str(actor.id),
+            member,
+            username,
+            source="manual_slash",
+            manual=True,
+        )
+        await self._send_interaction_embed(interaction, embed, ephemeral=True)
 
     @commands.command(name="verify")
     async def verify(self, ctx: commands.Context) -> None:

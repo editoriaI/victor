@@ -401,16 +401,16 @@ def create_bot(cfg) -> commands.Bot:
             interaction.user.id,
             command.qualified_name,
             str(interaction.guild_id) if interaction.guild_id else "dm",
-            publish_to_channel=False,
         )
 
     @bot.event
     async def setup_hook() -> None:
-        # Bring verify and help back online while the rest of the broader command set stays parked.
+        # Bring the rebuilt core cogs online while the rest of the broader command set stays staged.
         await bot.load_extension("bot.cogs.staff_console")
         await bot.load_extension("bot.cogs.monitor")
         await bot.load_extension("bot.cogs.verify")
         await bot.load_extension("bot.cogs.admin")
+        await bot.load_extension("bot.cogs.blackmarket")
         await bot.load_extension("bot.cogs.help")
         synced_count = 0
         if cfg.command_guild_ids:
