@@ -1,3 +1,4 @@
+import json
 import discord
 from datetime import datetime, timezone
 from typing import List, Optional
@@ -16,6 +17,7 @@ TITLE_REQUEST = "☎️ VICTOR // REQUEST"
 TITLE_MATCH = "⛓️ VICTOR // MATCH"
 TITLE_HELP = "🦇 VICTOR // HELP"
 TITLE_ADMIN = "📟 VICTOR // ADMIN"
+TITLE_BANK = "🏦 VICTOR // BANK"
 
 
 def _timestamp() -> str:
@@ -558,6 +560,38 @@ def status_embed(
     return embed
 
 
+def victor_patch_note_embed(user_mention: str, verify_channel_mention: Optional[str] = None) -> discord.Embed:
+    embed = make_embed(
+        TITLE_HELP,
+        "[ PATCH NOTE // VICTOR LIVE UPDATE ]\n\nSignal received.\nVictor has moved out of the old speech loop and into cleaner live ops.\n\nVerification stays structured.\nMarket lanes are getting sharper.\nTrusted traffic now has its own gravity.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[TAGGED]", value=user_mention, inline=True)
+    embed.add_field(name="[BUILD]", value="market routing + gold desk", inline=True)
+    embed.add_field(name="[STATUS]", value="live and being refined in public", inline=True)
+    embed.add_field(
+        name="[LIVE LANES]",
+        value=(
+            "- verify intake and status desk\n"
+            "- market board for buying and selling\n"
+            "- gold routing for looking / selling / trusted overflow"
+        ),
+        inline=False,
+    )
+    if verify_channel_mention:
+        embed.add_field(
+            name="[VERIFY START]",
+            value=f"verification still begins in {verify_channel_mention} with `!verify`.",
+            inline=False,
+        )
+    embed.add_field(
+        name="[PATCH MOOD]",
+        value="Less monologue. More movement. Cleaner paper trail. Same attitude.",
+        inline=False,
+    )
+    return embed
+
+
 def permission_denied_embed(required_role: str) -> discord.Embed:
     embed = urgent_embed("PERMISSION", "[ ACCESS DENIED ]\n\nThat lane is not yours.\n\nAnd no, asking again will not change that.")
     embed.add_field(name="[REQUIRED]", value=required_role, inline=False)
@@ -567,6 +601,109 @@ def permission_denied_embed(required_role: str) -> discord.Embed:
 def invalid_usage_embed(usage: str) -> discord.Embed:
     embed = urgent_embed("INVALID", "[ INVALID INPUT ]\n\nThat was not the command.\n\nFollow the structure like everyone else\nor continue guessing. I'll be here either way.")
     embed.add_field(name="[USAGE]", value=usage, inline=False)
+    return embed
+
+
+def bank_profile_required_embed() -> discord.Embed:
+    embed = make_embed(
+        TITLE_BANK,
+        "[ BANK PROFILE MISSING ]\n\nVictor cannot open the account view yet because this member does not have a linked Highrise identity on file.",
+        COLOR_WARN,
+    )
+    embed.add_field(
+        name="[NEXT]",
+        value="Finish verification first so Victor can tie the banking record to the correct member.",
+        inline=False,
+    )
+    return embed
+
+
+def bank_balance_embed(
+    *,
+    user_mention: str,
+    highrise_username: str,
+    checking_balance: int,
+    savings_balance: int,
+    total_balance: int,
+    recent_count: int,
+) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BANK,
+        "[ ACCOUNT SUMMARY ]\n\nVictor pulled the current ledger view for this member.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[HIGHRISE]", value=highrise_username or "UNLINKED", inline=True)
+    embed.add_field(name="[TOTAL]", value=f"{total_balance:,} gold", inline=True)
+    embed.add_field(name="[CHECKING]", value=f"{checking_balance:,} gold", inline=True)
+    embed.add_field(name="[SAVINGS]", value=f"{savings_balance:,} gold", inline=True)
+    embed.add_field(name="[RECENT]", value=f"{recent_count} transaction(s)", inline=True)
+    embed.add_field(
+        name="[NOTE]",
+        value="Checking is the live transfer lane. Savings is tracked separately for later withdrawal work.",
+        inline=False,
+    )
+    return embed
+
+
+def bank_transactions_embed(
+    *,
+    user_mention: str,
+    transactions: List[dict],
+) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BANK,
+        "[ RECENT ACTIVITY ]\n\nVictor pulled the latest transaction receipts tied to this member.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=False)
+    if not transactions:
+        embed.add_field(name="[LEDGER]", value="No transactions on file yet.", inline=False)
+        return embed
+
+    lines = []
+    for transaction in transactions[:5]:
+        metadata_raw = transaction.get("metadata") or "{}"
+        try:
+            metadata = json.loads(metadata_raw)
+        except Exception:
+            metadata = {}
+        note = metadata.get("note") or transaction.get("reference_type") or "bank event"
+        lines.append(
+            f"`#{transaction['id']}` {transaction['transaction_type']} • {int(transaction['amount']):,} gold • {note}"
+        )
+    embed.add_field(name="[LEDGER]", value="\n".join(lines), inline=False)
+    return embed
+
+
+def bank_transfer_success_embed(
+    *,
+    sender_mention: str,
+    recipient_mention: str,
+    amount: int,
+    sender_balance_after: int,
+    note: str,
+) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BANK,
+        "[ TRANSFER POSTED ]\n\nVictor moved the funds across the internal ledger and stamped the receipt.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[FROM]", value=sender_mention, inline=True)
+    embed.add_field(name="[TO]", value=recipient_mention, inline=True)
+    embed.add_field(name="[AMOUNT]", value=f"{amount:,} gold", inline=True)
+    embed.add_field(name="[CHECKING LEFT]", value=f"{sender_balance_after:,} gold", inline=True)
+    embed.add_field(name="[NOTE]", value=note or "No note attached.", inline=False)
+    return embed
+
+
+def bank_transfer_error_embed(message: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BANK,
+        "[ TRANSFER BLOCKED ]\n\nVictor refused to move the funds.",
+        COLOR_WARN,
+    )
+    embed.add_field(name="[WHY]", value=message, inline=False)
     return embed
 
 
@@ -631,6 +768,233 @@ def listing_created_embed(listing_id: int, item_name: str, price: int) -> discor
     return embed
 
 
+def market_trade_post_embed(
+    *,
+    asset_type: str,
+    action: str,
+    user_mention: str,
+    item_name: str,
+    price: int,
+    details: str,
+    trusted_roles: Optional[List[str]] = None,
+    duplicate_count: int = 1,
+) -> discord.Embed:
+    normalized_action = action.casefold()
+    normalized_asset = (asset_type or "market").strip().casefold()
+    title = "SELL" if normalized_action == "sell" else "BUY"
+    verb = "selling" if normalized_action == "sell" else "buying"
+    asset_label = normalized_asset.upper()
+    embed = make_embed(
+        f"{TITLE_BLACKMARKET} // {asset_label} {title}",
+        f"{asset_label.title()} lane is live. {user_mention} is {verb} and Victor posted the call clean.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[ITEM]", value=item_name, inline=True)
+    embed.add_field(name="[PRICE]", value=str(price), inline=True)
+    embed.add_field(name="[DETAILS]", value=details[:1024], inline=False)
+    if trusted_roles:
+        embed.add_field(name="[TRUSTED]", value=", ".join(trusted_roles), inline=True)
+    embed.add_field(name="[POSTS]", value=str(max(1, duplicate_count)), inline=True)
+    embed.add_field(name="[LANE]", value=f"{normalized_asset} > {normalized_action} > gather info > post", inline=True)
+    return embed
+
+
+def market_trade_posted_embed(
+    *,
+    asset_type: str,
+    action: str,
+    item_name: str,
+    price: int,
+    duplicate_count: int,
+    trusted_roles: Optional[List[str]] = None,
+) -> discord.Embed:
+    normalized_asset = (asset_type or "market").strip().casefold()
+    boost_note = "trusted boost applied." if duplicate_count > 1 else "single post sent."
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        f"{normalized_asset.title()} {action.casefold()} post is out. {boost_note}",
+        COLOR_OK,
+    )
+    embed.add_field(name="[ITEM]", value=item_name, inline=True)
+    embed.add_field(name="[PRICE]", value=str(price), inline=True)
+    embed.add_field(name="[POSTS]", value=str(duplicate_count), inline=True)
+    if trusted_roles:
+        embed.add_field(name="[TRUSTED]", value=", ".join(trusted_roles), inline=False)
+    return embed
+
+
+def market_cooldown_embed(minutes_left: int, lane_label: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        "Cooldown active. Let the current post breathe before you throw another one at the wall.",
+        COLOR_WARN,
+    )
+    embed.add_field(name="[LANE]", value=lane_label, inline=True)
+    embed.add_field(name="[WAIT]", value=f"{max(1, minutes_left)} minute(s)", inline=True)
+    return embed
+
+
+def market_match_beta_embed(match_count: int, *, asset_type: str) -> discord.Embed:
+    normalized_asset = (asset_type or "market").strip().casefold()
+    embed = make_embed(
+        TITLE_MATCH,
+        f"Beta match scan ran against the live {normalized_asset} board.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[MATCHES]", value=str(match_count), inline=True)
+    embed.add_field(name="[MODE]", value="beta", inline=True)
+    embed.add_field(
+        name="[NOTE]",
+        value="This is a soft signal for now. Victor is only checking the board and reporting possible overlap.",
+        inline=False,
+    )
+    return embed
+
+
+def gold_trade_post_embed(
+    *,
+    action: str,
+    user_mention: str,
+    item_name: str,
+    price: int,
+    details: str,
+    trusted_roles: Optional[List[str]] = None,
+    duplicate_count: int = 1,
+) -> discord.Embed:
+    return market_trade_post_embed(
+        asset_type="gold",
+        action=action,
+        user_mention=user_mention,
+        item_name=item_name,
+        price=price,
+        details=details,
+        trusted_roles=trusted_roles,
+        duplicate_count=duplicate_count,
+    )
+
+
+def gold_trade_posted_embed(
+    *,
+    action: str,
+    item_name: str,
+    price: int,
+    duplicate_count: int,
+    trusted_roles: Optional[List[str]] = None,
+) -> discord.Embed:
+    return market_trade_posted_embed(
+        asset_type="gold",
+        action=action,
+        item_name=item_name,
+        price=price,
+        duplicate_count=duplicate_count,
+        trusted_roles=trusted_roles,
+    )
+
+
+def gold_match_beta_embed(match_count: int) -> discord.Embed:
+    return market_match_beta_embed(match_count, asset_type="gold")
+
+
+def price_check_post_embed(*, user_mention: str, item_name: str, details: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        "Price check filed. The board can weigh in without the whole lane turning into static.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[ITEM]", value=item_name, inline=True)
+    embed.add_field(name="[LANE]", value="price checks", inline=True)
+    embed.add_field(name="[DETAILS]", value=details[:1024], inline=False)
+    return embed
+
+
+def price_check_posted_embed(item_name: str, channel_mention: Optional[str]) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        "Price check sent.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[ITEM]", value=item_name, inline=True)
+    embed.add_field(name="[CHANNEL]", value=channel_mention or "current channel", inline=True)
+    return embed
+
+
+def proof_of_sale_post_embed(*, user_mention: str, details: str) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        "Vouch logged. Proof stays in one lane instead of getting lost in side chatter.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[USER]", value=user_mention, inline=True)
+    embed.add_field(name="[LANE]", value="proof of selling", inline=True)
+    embed.add_field(name="[DETAILS]", value=details[:1024], inline=False)
+    return embed
+
+
+def proof_of_sale_posted_embed(channel_mention: Optional[str]) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        "Vouch post sent.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[CHANNEL]", value=channel_mention or "current channel", inline=False)
+    return embed
+
+
+def vouch_import_summary_embed(
+    *,
+    channel_mention: Optional[str],
+    scanned: int,
+    inserted: int,
+    updated: int,
+    skipped: int,
+) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        "Vouch skim complete. Victor indexed what he could find.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[CHANNEL]", value=channel_mention or "proof lane", inline=True)
+    embed.add_field(name="[SCANNED]", value=str(scanned), inline=True)
+    embed.add_field(name="[INSERTED]", value=str(inserted), inline=True)
+    embed.add_field(name="[UPDATED]", value=str(updated), inline=True)
+    embed.add_field(name="[SKIPPED]", value=str(skipped), inline=True)
+    return embed
+
+
+def vouch_lookup_embed(
+    *,
+    member_mention: str,
+    total_count: int,
+    rows: list[dict],
+) -> discord.Embed:
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        "Vouch file pulled from Victor's proof index.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[MEMBER]", value=member_mention, inline=True)
+    embed.add_field(name="[TOTAL]", value=str(total_count), inline=True)
+    if not rows:
+        embed.add_field(name="[VOUCHES]", value="None on file yet.", inline=False)
+        return embed
+
+    lines: list[str] = []
+    for row in rows[:4]:
+        preview = " ".join((row.get("details") or "").split())
+        if len(preview) > 60:
+            preview = preview[:57].rstrip() + "..."
+        voucher = f"<@{row['voucher_discord_id']}>" if row.get("voucher_discord_id") else "unknown"
+        jump = row.get("source_url") or ""
+        line = f"{voucher} - {preview}"
+        if jump:
+            line += f" [jump]({jump})"
+        lines.append(line)
+    embed.add_field(name="[RECENT]", value="\n".join(lines), inline=False)
+    return embed
+
+
 def listing_removed_embed(listing_id: int) -> discord.Embed:
     embed = make_embed(
         TITLE_BLACKMARKET,
@@ -638,6 +1002,26 @@ def listing_removed_embed(listing_id: int) -> discord.Embed:
         COLOR_WARN,
     )
     embed.add_field(name="[ID]", value=str(listing_id), inline=True)
+    return embed
+
+
+def market_trade_removed_embed(
+    *,
+    asset_type: str,
+    action: str,
+    post_count: int,
+    deleted_count: int,
+) -> discord.Embed:
+    normalized_asset = (asset_type or "market").strip().casefold()
+    normalized_action = (action or "sell").strip().casefold()
+    embed = make_embed(
+        TITLE_BLACKMARKET,
+        f"{normalized_asset.title()} {normalized_action} post pulled.",
+        COLOR_WARN,
+    )
+    embed.add_field(name="[POSTS CLOSED]", value=str(max(1, post_count)), inline=True)
+    embed.add_field(name="[MESSAGES REMOVED]", value=str(max(0, deleted_count)), inline=True)
+    embed.add_field(name="[LANE]", value=f"{normalized_asset} > {normalized_action}", inline=True)
     return embed
 
 
@@ -725,25 +1109,22 @@ def match_declined_embed(match_id: int) -> discord.Embed:
 def help_embed() -> discord.Embed:
     embed = make_embed(
         TITLE_HELP,
-        "pick a live thread from the menu. the rest are still backstage.",
+        "Open the menu and pick the lane you need. Victor handles verification, market activity, and a few staff tools from one place.",
         COLOR_NEUTRAL,
     )
-    embed.add_field(name="[MENU]", value="!menu", inline=True)
-    embed.add_field(name="[VERIFY]", value="!verify, !manualverify, !status", inline=True)
-    embed.add_field(name="[ADMIN]", value="!sync, !purge", inline=True)
-    embed.add_field(name="[MARKET]", value="!blackmarket list, add, remove", inline=True)
-    embed.add_field(name="[PARKED]", value="matchmaking, restart", inline=True)
+    embed.add_field(name="[OPEN MENU]", value="!menu", inline=True)
+    embed.add_field(name="[VERIFY]", value="!verify, !updateusername, !status", inline=True)
+    embed.add_field(name="[MARKET]", value="!blackmarket, !request, !accept, !decline", inline=True)
     embed.add_field(
-        name="[VERIFY FLOW]",
-        value="`verify` opens intake, collects the member's Highrise username, and stores it on file. `manualverify` stays available for staff corrections or overrides.",
+        name="[MEMBER HELP]",
+        value="Use Verify to get your Highrise username on file, Status to check progress, Marketplace for items, and Gold for buy or sell gold posts.",
         inline=False,
     )
     embed.add_field(
-        name="[DEEP HELP]",
-        value="!menu | !help verify | !help status | !help sync | !help blackmarket | !help parked",
+        name="[MORE TOPICS]",
+        value="!help verify | !help status | !help blackmarket | !help gold | !help sync | !help admin",
         inline=False,
     )
-    embed.add_field(name="[MENU]", value="Use the select menu or the quick buttons below.", inline=False)
     return embed
 
 
@@ -789,4 +1170,57 @@ def blacklist_list_embed(entries: list) -> discord.Embed:
 def match_closed_embed(match_id: int) -> discord.Embed:
     embed = urgent_embed("MATCH CLOSED", "Too late. I closed it.")
     embed.add_field(name="[MATCH]", value=str(match_id), inline=True)
+    return embed
+
+
+def project_hot_embed() -> discord.Embed:
+    embed = make_embed(
+        "VICTOR // PROJECTS // HOT",
+        "Use this desk to file a project update without dragging the whole feature into chat. Pick a lane, answer a few short prompts, and Victor folds it into the right project bucket.",
+        COLOR_NEUTRAL,
+    )
+    embed.add_field(name="[LANES]", value="Feature | Fix | Research | Archive", inline=False)
+    embed.add_field(
+        name="[FLOW]",
+        value="Choose a lane, name the project, name the fold, add a short title, then drop the important details.",
+        inline=False,
+    )
+    return embed
+
+
+def project_update_created_embed(
+    project_name: str,
+    fold_key: str,
+    update_type: str,
+    title: str,
+    update_id: int,
+) -> discord.Embed:
+    embed = make_embed(
+        "VICTOR // PROJECTS",
+        "[ UPDATE FILED ]\n\nProject note stored and folded where it belongs.",
+        COLOR_OK,
+    )
+    embed.add_field(name="[PROJECT]", value=project_name, inline=True)
+    embed.add_field(name="[FOLD]", value=fold_key, inline=True)
+    embed.add_field(name="[TYPE]", value=update_type.upper(), inline=True)
+    embed.add_field(name="[TITLE]", value=title, inline=False)
+    embed.add_field(name="[FILE ID]", value=str(update_id), inline=True)
+    return embed
+
+
+def recent_project_updates_embed(updates: list) -> discord.Embed:
+    embed = make_embed(
+        "VICTOR // PROJECTS",
+        "Recent project filings.",
+        COLOR_NEUTRAL,
+    )
+    if not updates:
+        embed.add_field(name="[UPDATES]", value="No project filings yet.", inline=False)
+        return embed
+    lines = []
+    for row in updates[:6]:
+        lines.append(
+            f"#{row['id']} | {row['project_name']} | {row['fold_key']} | {row['update_type']} | {row['title']}"
+        )
+    embed.add_field(name="[RECENT]", value="```\n" + "\n".join(lines) + "\n```", inline=False)
     return embed

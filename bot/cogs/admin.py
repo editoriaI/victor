@@ -9,6 +9,7 @@ from discord.ext import commands
 
 from bot import db, embeds
 from bot.config import Config
+from bot.utils.command_sync import sync_application_commands
 from bot.utils.permissions import has_any_role
 
 
@@ -70,8 +71,8 @@ class AdminCog(commands.Cog):
         await interaction.response.defer(ephemeral=ephemeral)
 
     async def _run_sync_action(self) -> discord.Embed:
-        synced = await self.bot.tree.sync()
-        return embeds.sync_success_embed(len(synced))
+        synced_count = await sync_application_commands(self.bot, self.cfg)
+        return embeds.sync_success_embed(synced_count)
 
     def _autosync_state_embed(self, enable: bool) -> discord.Embed:
         state_text = "ENABLED" if enable else "DISABLED"

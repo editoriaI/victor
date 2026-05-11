@@ -47,6 +47,7 @@ Or launch a child-mode session directly:
 ## Commands
 
 - `!sync`
+- `!hot`
 - `!blackmarket list [query]`
 - `!blackmarket add "item name" 25000`
 - `!blackmarket remove <listing_id>`
@@ -55,6 +56,7 @@ Or launch a child-mode session directly:
 ## Slash Commands
 
 - `/help [feature]`
+- `/hot`
 - `/menu`
 - `/verify`
 - `/status [member]`
@@ -75,7 +77,10 @@ Or launch a child-mode session directly:
 - By default, Victor watches `bot/`, `config/`, `.env`, `requirements.txt`, and `db/schema.sql` and restarts when those files change.
 - `!sync`, `!blackmarket ...`, and `!purge` are active right now.
 - `/help`, `/menu`, `/verify`, `/status`, `/manualverify`, `/sync`, `/autosync`, `/autoverifymode`, `/marketlist`, `/marketadd`, `/marketremove`, and `/purge` are active right now.
+- `!hot` and `/hot` open the project desk for filing project updates into a project + fold through a simplified button and modal flow.
 - The parked command inventory lives in `docs/command-rebuild-reference.md`.
+- Current Highrise Bot API / Web API / Discord cross-research for the server lives in `docs/highrise-discord-api-brief.md`.
+- Banking architecture mapping currently lives in `docs/banking/phase-1-banking-map.md`.
 - The underlying cogs for verification, marketplace, matchmaking, and help are still in the repo as rebuild reference, but they are not loaded by `bot/main.py`.
 - Child process logs stay quiet in the console and write detailed command activity to `logs/victor-child.log`.
 - If `log_channel_id` is set, Victor posts a color-coded mobile-friendly console feed to that Discord channel.

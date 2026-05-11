@@ -16,11 +16,14 @@ from bot import embeds
 from bot.config import load_config
 from bot import db
 from bot.utils.command_logging import (
+    build_pending_patch_note_embed,
     log_command_event,
     log_system_event,
+    mark_patch_notes_published,
     maybe_publish_patch_note,
     should_publish_command_success,
 )
+from bot.utils.command_sync import sync_application_commands
 from bot.utils.auto_sync import maybe_auto_sync
 from bot.utils.command_replay import scan_missed_commands
 from bot.utils.permissions import classify_member_access
@@ -38,6 +41,37 @@ ANSI_COLORS = {
     logging.ERROR: "\033[31m",
     logging.CRITICAL: "\033[41m",
 }
+CONSOLE_LOG_HINT = "logs/victor-child.log"
+
+
+def _single_line(value: object) -> str:
+    return " ".join(str(value or "").split())
+
+
+def _truncate_console(value: object, limit: int = 220) -> str:
+    text = _single_line(value)
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 3]}..."
+
+
+def _parse_pipe_fields(message: str) -> dict[str, str]:
+    data: dict[str, str] = {}
+    parts = [part.strip() for part in str(message or "").split("|") if part.strip()]
+    if not parts:
+        return data
+
+    first_bits = parts[0].split()
+    if len(first_bits) >= 2:
+        data["surface"] = first_bits[0]
+        data["status"] = first_bits[1]
+
+    for part in parts[1:]:
+        if "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        data[key.strip()] = value.strip()
+    return data
 
 
 class ColorFormatter(logging.Formatter):
@@ -47,6 +81,158 @@ class ColorFormatter(logging.Formatter):
         if not color:
             return message
         return f"{color}{message}{ANSI_RESET}"
+
+
+class VictorConsoleFormatter(ColorFormatter):
+    def __init__(self) -> None:
+        super().__init__()
+        self._suppressed_until: dict[str, float] = {}
+
+    def formatException(self, ei) -> str:
+        # Keep full tracebacks in the rotating log file, not in the PowerShell feed.
+        return ""
+
+    def format(self, record: logging.LogRecord) -> str:
+        if self._should_suppress(record):
+            return ""
+        message = self._render_console_message(record)
+        color = ANSI_COLORS.get(record.levelno)
+        if not color:
+            return message
+        return f"{color}{message}{ANSI_RESET}"
+
+    def _should_suppress(self, record: logging.LogRecord) -> bool:
+        key, ttl_seconds = self._suppression_rule(record)
+        if not key or ttl_seconds <= 0:
+            return False
+
+        now = time.monotonic()
+        until = self._suppressed_until.get(key, 0.0)
+        if now < until:
+            return True
+
+        self._suppressed_until[key] = now + ttl_seconds
+        return False
+
+    def _suppression_rule(self, record: logging.LogRecord) -> tuple[Optional[str], float]:
+        message = _single_line(record.getMessage())
+        logger_name = record.name or "root"
+
+        if logger_name == "root" and "Code change detected in" in message:
+            return "root:code-change", 15.0
+        if logger_name == "victor.system" and (
+            message.startswith("Supervisor spawned child")
+            or message.startswith("Child Online")
+            or message.startswith("Member roster synced")
+            or message.startswith("Auto Sync")
+            or message.startswith("Missed Commands")
+        ):
+            return f"{logger_name}:{message.split('|', 1)[0].strip()}", 20.0
+        if logger_name in {"victor.sync", "victor.auto_sync"}:
+            return logger_name, 20.0
+        if logger_name.startswith("discord") and "Attempting a reconnect in" in message:
+            return "discord:reconnect", 30.0
+        return None, 0.0
+
+    def _render_console_message(self, record: logging.LogRecord) -> str:
+        timestamp = self.formatTime(record, "%H:%M:%S")
+        level = "crash-thread" if record.levelno >= logging.ERROR else "side-eye update"
+        lines = [f"{timestamp} | Victor // {level}"]
+        lines.extend(self._message_lines(record))
+        return "\n".join(line for line in lines if line)
+
+    def _message_lines(self, record: logging.LogRecord) -> list[str]:
+        logger_name = record.name or "root"
+        if logger_name == "victor.commands":
+            return self._command_lines(record)
+        if logger_name in {"victor.system", "victor.sync", "victor.auto_sync"}:
+            return self._system_lines(record)
+        if logger_name.startswith("discord") or logger_name.startswith("aiohttp"):
+            return self._network_lines(record)
+        return self._generic_lines(record)
+
+    def _command_lines(self, record: logging.LogRecord) -> list[str]:
+        data = _parse_pipe_fields(record.getMessage())
+        surface = data.get("surface", "prefix")
+        command_name = data.get("command", "unknown")
+        location = data.get("location")
+        details = data.get("details")
+        command_label = f"/{command_name}" if surface == "slash" else f"!{command_name}"
+
+        if record.levelno >= logging.ERROR:
+            lines = [
+                f"tried `{command_label}` and it fell apart mid-scene.",
+            ]
+        else:
+            lines = [
+                f"`{command_label}` got weird enough that I am logging it in public.",
+            ]
+
+        if location:
+            lines.append(f"where: {'direct messages' if location == 'dm' else f'guild {location}'}")
+        if details:
+            lines.append(f"receipts: {_truncate_console(details)}")
+        lines.append(f"full autopsy filed in `{CONSOLE_LOG_HINT}`.")
+        return lines
+
+    def _system_lines(self, record: logging.LogRecord) -> list[str]:
+        message = _single_line(record.getMessage())
+
+        if "Discord startup retry scheduled" in message:
+            data = _parse_pipe_fields(message)
+            attempt = data.get("attempt", "?")
+            delay = data.get("delay", "?")
+            error_name = data.get("error", "network trouble")
+            return [
+                "discord slipped out of reach again. how embarrassing.",
+                f"retry: attempt {attempt} in {delay}.",
+                f"receipts: {error_name}",
+                f"full autopsy filed in `{CONSOLE_LOG_HINT}`.",
+            ]
+
+        if "Code change detected in" in message:
+            return [
+                _truncate_console(message),
+                "wardrobe change acknowledged. restarting the corpse.",
+            ]
+
+        if message:
+            return [
+                _truncate_console(message),
+                f"full autopsy filed in `{CONSOLE_LOG_HINT}`." if record.levelno >= logging.ERROR else "",
+            ]
+        return [f"something backstage moved. see `{CONSOLE_LOG_HINT}` if it keeps acting up."]
+
+    def _network_lines(self, record: logging.LogRecord) -> list[str]:
+        exc_type = None
+        exc_message = None
+        if record.exc_info and record.exc_info[0]:
+            exc_type = record.exc_info[0].__name__
+            exc_message = record.exc_info[1]
+
+        message = _truncate_console(record.getMessage())
+        lines = [
+            "discord just coughed smoke into the wiring again.",
+        ]
+        if message:
+            lines.append(f"receipts: {message}")
+        if exc_type:
+            lines.append(f"autopsy note: {exc_type}: {_truncate_console(exc_message)}")
+        lines.append(f"full traceback preserved in `{CONSOLE_LOG_HINT}`.")
+        return lines
+
+    def _generic_lines(self, record: logging.LogRecord) -> list[str]:
+        message = _truncate_console(record.getMessage())
+        lines = [
+            message or "something backstage broke character.",
+        ]
+        if record.exc_info and record.exc_info[0]:
+            lines.append(
+                f"autopsy note: {record.exc_info[0].__name__}: "
+                f"{_truncate_console(record.exc_info[1])}"
+            )
+        lines.append(f"full traceback preserved in `{CONSOLE_LOG_HINT}`.")
+        return lines
 
 
 def _setup_logging() -> None:
@@ -60,7 +246,7 @@ def _setup_logging() -> None:
 
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.WARNING)
-    console_handler.setFormatter(ColorFormatter("%(levelname)s | %(name)s | %(message)s"))
+    console_handler.setFormatter(VictorConsoleFormatter())
 
     file_handler = RotatingFileHandler(
         logs_dir / "victor-child.log",
@@ -443,11 +629,14 @@ def create_bot(cfg) -> commands.Bot:
             verify_channel_mention = f"<#{cfg.verify_channel_id}>" if cfg.verify_channel_id else None
             try:
                 async with message.channel.typing():
-                    await asyncio.sleep(1.4)
+                    await asyncio.sleep(1.0)
+                patch_embed = build_pending_patch_note_embed()
                 await message.reply(
-                    embed=embeds.victor_intro_embed(message.author.mention, verify_channel_mention),
+                    embed=patch_embed or embeds.victor_patch_note_embed(message.author.mention, verify_channel_mention),
                     mention_author=False,
                 )
+                if patch_embed is not None:
+                    mark_patch_notes_published()
             except Exception as exc:
                 await log_command_event(
                     bot,
@@ -461,9 +650,9 @@ def create_bot(cfg) -> commands.Bot:
                     level=logging.ERROR,
                 )
 
+        verify_cog = bot.get_cog("VerifyCog")
         plain_text = message.content.strip().lower()
         if plain_text == "/verify":
-            verify_cog = bot.get_cog("VerifyCog")
             if verify_cog is not None:
                 try:
                     handled = await verify_cog.handle_plain_text_verify_trigger(message)
@@ -481,6 +670,24 @@ def create_bot(cfg) -> commands.Bot:
                         details=f"plain_text_verify_fallback_failed: {exc}",
                         level=logging.ERROR,
                     )
+
+        if verify_cog is not None:
+            try:
+                handled = await verify_cog.handle_verify_channel_username_drop(message)
+                if handled:
+                    return
+            except Exception as exc:
+                await log_command_event(
+                    bot,
+                    cfg,
+                    "fail",
+                    "prefix",
+                    message.author.id,
+                    "verify",
+                    str(message.guild.id) if message.guild else "dm",
+                    details=f"verify_channel_username_drop_failed: {exc}",
+                    level=logging.ERROR,
+                )
 
         await bot.process_commands(message)
 
@@ -508,25 +715,11 @@ def create_bot(cfg) -> commands.Bot:
         await bot.load_extension("bot.cogs.verify")
         await bot.load_extension("bot.cogs.admin")
         await bot.load_extension("bot.cogs.blackmarket")
+        await bot.load_extension("bot.cogs.matchmaking")
+        await bot.load_extension("bot.cogs.bank")
         await bot.load_extension("bot.cogs.help")
-        synced_count = 0
-        if cfg.command_guild_ids:
-            for guild_id in cfg.command_guild_ids:
-                guild = discord.Object(id=guild_id)
-                bot.tree.copy_global_to(guild=guild)
-            bot.tree.clear_commands(guild=None)
-            cleared = await bot.tree.sync()
-            logging.info("Cleared %s global application commands before guild sync", len(cleared))
-            for guild_id in cfg.command_guild_ids:
-                guild = discord.Object(id=guild_id)
-                synced = await bot.tree.sync(guild=guild)
-                synced_count = max(synced_count, len(synced))
-                logging.info("Synced %s application commands to guild %s", len(synced), guild_id)
-        else:
-            synced = await bot.tree.sync()
-            synced_count = len(synced)
-            logging.info("Synced %s application commands", len(synced))
-        bot.victor_synced_count = synced_count
+        await bot.load_extension("bot.cogs.projects")
+        await sync_application_commands(bot, cfg)
 
     @bot.tree.error
     async def on_app_command_error(

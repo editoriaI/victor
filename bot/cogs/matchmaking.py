@@ -57,6 +57,96 @@ class MatchmakingCog(commands.Cog):
             return
         await interaction.response.send_message(embed=embed, ephemeral=ephemeral)
 
+    async def _create_request_for_member(
+        self,
+        member: discord.Member,
+        item_name: str,
+        max_price: int,
+    ) -> list[discord.Embed]:
+        response_embeds: list[discord.Embed] = []
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            request_id = db.create_request(conn, str(member.id), item_name, int(max_price))
+            matches = db.find_matching_listings(conn, item_name, int(max_price))
+
+            max_matches = 5
+            created = 0
+            for listing in matches:
+                if db.is_blacklisted(conn, listing["seller_id"]):
+                    continue
+                if created >= max_matches:
+                    break
+                match_id = db.create_match(conn, request_id, listing["seller_id"])
+                created += 1
+
+                seller = member.guild.get_member(int(listing["seller_id"])) if member.guild else None
+                if seller:
+                    try:
+                        await seller.send(embed=embeds.match_alert_embed(match_id, item_name, max_price))
+                    except discord.Forbidden:
+                        pass
+
+            if created == 0:
+                db.update_request_status(conn, request_id, "NO_MATCH")
+                db.log_audit(
+                    conn,
+                    actor_id=str(member.id),
+                    action="REQUEST",
+                    target_id=str(request_id),
+                    details="no_match",
+                )
+                conn.commit()
+                response_embeds.append(embeds.request_created_embed(request_id, item_name, max_price))
+                response_embeds.append(embeds.no_sellers_embed(item_name))
+                return response_embeds
+
+            db.log_audit(
+                conn,
+                actor_id=str(member.id),
+                action="REQUEST",
+                target_id=str(request_id),
+                details=f"matches={created}",
+            )
+            conn.commit()
+            response_embeds.append(embeds.request_created_embed(request_id, item_name, max_price))
+            return response_embeds
+        finally:
+            conn.close()
+
+    async def handle_request_modal(
+        self,
+        interaction: discord.Interaction,
+        item_name: str,
+        max_price_text: str,
+    ) -> None:
+        author = interaction.user
+        if not isinstance(author, discord.Member):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Buyer"))
+            return
+
+        if not self._can_buyer(author):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Buyer"))
+            return
+
+        author_blacklist = self._blacklist_record(str(author.id))
+        if author_blacklist and not self._is_admin(author):
+            await self._send_interaction_embed(interaction, embeds.blacklisted_embed(author_blacklist.get("reason")))
+            return
+
+        cleaned_name = (item_name or "").strip()
+        try:
+            max_price = int((max_price_text or "").strip())
+        except ValueError:
+            max_price = 0
+
+        if not cleaned_name or max_price <= 0:
+            await self._send_interaction_embed(interaction, embeds.invalid_usage_embed("item name + positive max price"))
+            return
+
+        embeds_to_send = await self._create_request_for_member(author, cleaned_name, max_price)
+        for index, embed in enumerate(embeds_to_send):
+            await self._send_interaction_embed(interaction, embed, ephemeral=True if index == 0 else True)
+
     @commands.command(name="request")
     async def request_item(self, ctx: commands.Context, item_name: str, max_price: int) -> None:
         if not self._can_buyer(ctx.author):
@@ -75,56 +165,9 @@ class MatchmakingCog(commands.Cog):
             await ctx.send(embed=embed)
             return
 
-        conn = db.get_connection(self.cfg.db_path)
-        try:
-            request_id = db.create_request(conn, str(ctx.author.id), item_name, int(max_price))
-            matches = db.find_matching_listings(conn, item_name, int(max_price))
-
-            max_matches = 5
-            created = 0
-            for listing in matches:
-                if db.is_blacklisted(conn, listing["seller_id"]):
-                    continue
-                if created >= max_matches:
-                    break
-                match_id = db.create_match(conn, request_id, listing["seller_id"])
-                created += 1
-
-                seller = ctx.guild.get_member(int(listing["seller_id"])) if ctx.guild else None
-                if seller:
-                    try:
-                        await seller.send(
-                            embed=embeds.match_alert_embed(match_id, item_name, max_price)
-                        )
-                    except discord.Forbidden:
-                        pass
-
-            if created == 0:
-                db.update_request_status(conn, request_id, "NO_MATCH")
-                db.log_audit(
-                    conn,
-                    actor_id=str(ctx.author.id),
-                    action="REQUEST",
-                    target_id=str(request_id),
-                    details="no_match",
-                )
-                conn.commit()
-                await ctx.send(embed=embeds.request_created_embed(request_id, item_name, max_price))
-                await ctx.send(embed=embeds.no_sellers_embed(item_name))
-                return
-
-            db.log_audit(
-                conn,
-                actor_id=str(ctx.author.id),
-                action="REQUEST",
-                target_id=str(request_id),
-                details=f"matches={created}",
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-        await ctx.send(embed=embeds.request_created_embed(request_id, item_name, max_price))
+        embeds_to_send = await self._create_request_for_member(ctx.author, item_name, int(max_price))
+        for embed in embeds_to_send:
+            await ctx.send(embed=embed)
 
     @commands.command(name="cancel")
     async def cancel_request(self, ctx: commands.Context, request_id: int) -> None:
@@ -290,58 +333,9 @@ class MatchmakingCog(commands.Cog):
             )
             return
 
-        conn = db.get_connection(self.cfg.db_path)
-        try:
-            request_id = db.create_request(conn, str(author.id), item_name, int(max_price))
-            matches = db.find_matching_listings(conn, item_name, int(max_price))
-
-            max_matches = 5
-            created = 0
-            for listing in matches:
-                if db.is_blacklisted(conn, listing["seller_id"]):
-                    continue
-                if created >= max_matches:
-                    break
-                match_id = db.create_match(conn, request_id, listing["seller_id"])
-                created += 1
-
-                seller = interaction.guild.get_member(int(listing["seller_id"])) if interaction.guild else None
-                if seller:
-                    try:
-                        await seller.send(embed=embeds.match_alert_embed(match_id, item_name, max_price))
-                    except discord.Forbidden:
-                        pass
-
-            if created == 0:
-                db.update_request_status(conn, request_id, "NO_MATCH")
-                db.log_audit(
-                    conn,
-                    actor_id=str(author.id),
-                    action="REQUEST",
-                    target_id=str(request_id),
-                    details="no_match",
-                )
-                conn.commit()
-                await self._send_interaction_embed(
-                    interaction, embeds.request_created_embed(request_id, item_name, max_price)
-                )
-                await interaction.followup.send(embed=embeds.no_sellers_embed(item_name), ephemeral=True)
-                return
-
-            db.log_audit(
-                conn,
-                actor_id=str(author.id),
-                action="REQUEST",
-                target_id=str(request_id),
-                details=f"matches={created}",
-            )
-            conn.commit()
-        finally:
-            conn.close()
-
-        await self._send_interaction_embed(
-            interaction, embeds.request_created_embed(request_id, item_name, max_price)
-        )
+        embeds_to_send = await self._create_request_for_member(author, item_name, int(max_price))
+        for embed in embeds_to_send:
+            await self._send_interaction_embed(interaction, embed)
 
     @app_commands.command(name="cancelrequest", description="Cancel one of your buyer requests.")
     @app_commands.describe(request_id="Request ID to cancel")

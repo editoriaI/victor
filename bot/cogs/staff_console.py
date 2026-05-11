@@ -109,7 +109,7 @@ def build_staff_attention_embed(
     if quick_fix:
         embed.add_field(name="Quick Fix", value=quick_fix[:1024], inline=False)
     if apply_fix:
-        embed.add_field(name="Apply Fix", value=apply_fix[:1024], inline=False)
+        embed.add_field(name="Quick Fix Action", value=apply_fix[:1024], inline=False)
     return embed
 
 
@@ -167,9 +167,9 @@ class CommandAttentionView(discord.ui.View):
         await _send_interaction_text(interaction, quick_fix)
 
     @discord.ui.button(
-        label="Apply Fix",
-        style=discord.ButtonStyle.danger,
-        emoji="📟",
+        label="Quick Fix",
+        style=discord.ButtonStyle.secondary,
+        emoji="🔄",
         custom_id=f"{COMMAND_ACTION_VIEW_ID}:apply_fix",
     )
     async def apply_fix_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
@@ -178,7 +178,11 @@ class CommandAttentionView(discord.ui.View):
             return
 
         embed = interaction.message.embeds[0]
-        action = (_field_value(embed, "Apply Fix") or "").strip().casefold()
+        action = (
+            _field_value(embed, "Quick Fix Action")
+            or _field_value(embed, "Apply Fix")
+            or ""
+        ).strip().casefold()
         if not action or action == "none":
             await _send_interaction_text(
                 interaction,
@@ -236,6 +240,45 @@ class VerifyReviewView(discord.ui.View):
 class VerifyIntakeReviewView(discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Claim Intake",
+        style=discord.ButtonStyle.secondary,
+        emoji="📌",
+        custom_id=f"{VERIFY_INTAKE_VIEW_ID}:claim",
+    )
+    async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
+        if not interaction.message or not interaction.message.embeds:
+            await interaction.response.send_message("Victor misplaced the intake file.", ephemeral=True)
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member):
+            await interaction.response.send_message("Victor needs a staff member for that.", ephemeral=True)
+            return
+
+        embed = interaction.message.embeds[0]
+        existing_claim = _field_value(embed, "[CLAIMED BY]")
+        actor_mention = actor.mention
+        if existing_claim and existing_claim != actor_mention:
+            await interaction.response.send_message(
+                f"This intake is already claimed by {existing_claim}.",
+                ephemeral=True,
+            )
+            return
+
+        updated = discord.Embed.from_dict(embed.to_dict())
+        replaced = False
+        for index, field in enumerate(updated.fields):
+            if field.name == "[CLAIMED BY]":
+                updated.set_field_at(index, name="[CLAIMED BY]", value=actor_mention, inline=True)
+                replaced = True
+                break
+        if not replaced:
+            updated.add_field(name="[CLAIMED BY]", value=actor_mention, inline=True)
+
+        await interaction.message.edit(embed=updated, view=self)
+        await interaction.response.send_message("Intake claimed. First response owns it.", ephemeral=True)
 
     @discord.ui.button(
         label="Accept Username",
@@ -344,7 +387,6 @@ async def send_verify_review_post(
     )
     await send_log_channel(bot, cfg, embed=embed, view=VerifyReviewView())
 
-
 async def send_verify_intake_review_post(
     bot: commands.Bot,
     cfg: Config,
@@ -368,6 +410,7 @@ async def send_verify_intake_review_post(
         details=f"submitted_by={submitted_by_id} | previous_username={previous_username or 'NONE'}",
         next_move="accept if the username looks right for this member. reject if it needs to be resubmitted cleanly.",
     )
+    embed.add_field(name="[CLAIMED BY]", value="Unclaimed", inline=True)
     await send_log_channel(bot, cfg, embed=embed, view=VerifyIntakeReviewView())
 
 

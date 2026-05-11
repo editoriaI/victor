@@ -3,7 +3,7 @@ import logging
 import discord
 from discord.ext import commands
 
-from bot import embeds
+from bot import db, embeds
 from bot.config import Config
 from bot.utils.command_logging import log_command_event, should_publish_command_success
 
@@ -13,6 +13,14 @@ class MonitorCog(commands.Cog):
         self.bot = bot
         self.cfg = cfg
         self.logger = logging.getLogger("victor.monitor")
+
+    def _mark_command_seen(self, channel_id: int, message_id: int) -> None:
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            db.upsert_command_watch_last(conn, channel_id, message_id)
+            conn.commit()
+        finally:
+            conn.close()
 
     async def _report_failure(
         self, surface: str, user_id: int, command_name: str, error: Exception, location: str, details: str
@@ -32,6 +40,8 @@ class MonitorCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_command_completion(self, ctx: commands.Context) -> None:
+        if ctx.guild and ctx.channel and getattr(ctx.channel, "id", None):
+            self._mark_command_seen(ctx.channel.id, ctx.message.id)
         command_name = ctx.command.qualified_name if ctx.command else "unknown"
         await log_command_event(
             self.bot,
@@ -57,6 +67,8 @@ class MonitorCog(commands.Cog):
         original = getattr(error, "original", error)
         command_name = ctx.command.qualified_name if ctx.command else "unknown"
         location = str(ctx.guild.id) if ctx.guild else "dm"
+        if ctx.guild and ctx.channel and getattr(ctx.channel, "id", None):
+            self._mark_command_seen(ctx.channel.id, ctx.message.id)
 
         if isinstance(error, commands.CommandNotFound):
             await log_command_event(

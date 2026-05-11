@@ -194,11 +194,19 @@ class VerifyCog(commands.Cog):
                 return role
         return None
 
+    def _verified_access_role_names(self) -> List[str]:
+        role_names: List[str] = []
+        for key in ("member", "verified_unlock"):
+            for role_name in self.cfg.roles.get(key, []):
+                if role_name not in role_names:
+                    role_names.append(role_name)
+        return role_names
+
     async def _apply_verified_access(self, member: discord.Member, highrise_username: str) -> tuple[bool, List[str]]:
         nickname_changed = False
         unlocked_roles: List[str] = []
 
-        role_names = self.cfg.roles.get("verified_unlock", [])
+        role_names = self._verified_access_role_names()
         roles_to_add = []
         for role_name in role_names:
             role = self._find_role(member.guild, role_name)
@@ -210,7 +218,7 @@ class VerifyCog(commands.Cog):
             try:
                 await member.add_roles(*roles_to_add, reason="Victor verify intake complete")
             except discord.Forbidden:
-                self.logger.warning("Could not add verified unlock roles to %s", member.id)
+                self.logger.warning("Could not add verified access roles to %s", member.id)
 
         return nickname_changed, unlocked_roles
 
@@ -225,13 +233,13 @@ class VerifyCog(commands.Cog):
         lane = self._verify_channel_mention() or "the hr-id lane"
         status = (verification_status or "").upper()
         if status in {"USERNAME LOGGED", "VERIFIED"}:
-            return "You're verified. Keep the bio intact and let staff know if you need changes."
+            return f"You're verified. Keep the bio intact. If your Highrise changes, run `!updateusername new_name` inside {lane}."
         if status == "PENDING":
             return "Staff is reviewing the intake. Stand by for the console to post the result."
         if status == "RETRY REQUESTED":
-            return f"Staff requested a cleaner username. Update the entry and run `!verify` in {lane} again."
+            return f"Staff requested a cleaner username. Update the entry with `!updateusername new_name` inside {lane}."
         if status == "REJECTED":
-            return f"Staff rejected the intake. Fix the username and resubmit with `!verify` inside {lane}."
+            return f"Staff rejected the intake. Fix the username and resubmit with `!updateusername new_name` inside {lane}."
         return f"No intake logged. Run `!verify` inside {lane} or use the Verify button from `!menu`."
 
     def _trusted_roles(self, member: discord.Member) -> List[str]:
@@ -326,7 +334,7 @@ class VerifyCog(commands.Cog):
         members = await self._guild_human_members(guild)
         tracked_ids = self._verified_status_subject_ids()
         tracked_members = [member for member in members if str(member.id) in tracked_ids]
-        verified_roles = self.cfg.roles.get("verified_unlock", [])
+        verified_roles = self._verified_access_role_names()
 
         verified_members: list[discord.Member] = []
         unverified_members: list[discord.Member] = []
@@ -336,13 +344,13 @@ class VerifyCog(commands.Cog):
             else:
                 unverified_members.append(member)
 
-        verified_role_label = ", ".join(verified_roles) if verified_roles else "No verified role configured"
+        verified_role_label = ", ".join(verified_roles) if verified_roles else "No verified access role configured"
         embed = embeds.make_embed(
             embeds.TITLE_STATUS,
-            "Guild-wide verification scan for members who have already used the verify command, based on who currently has the verified role after staff acceptance.",
+            "Guild-wide verification scan for members who have already used the verify command, based on who currently has the verified access role after staff acceptance.",
             embeds.COLOR_NEUTRAL,
         )
-        embed.add_field(name="[VERIFIED ROLE]", value=verified_role_label, inline=False)
+        embed.add_field(name="[VERIFIED ACCESS]", value=verified_role_label, inline=False)
         embed.add_field(name="[VERIFY USERS]", value=str(len(tracked_members)), inline=True)
         embed.add_field(name="[VERIFIED]", value=str(len(verified_members)), inline=True)
         embed.add_field(name="[NOT VERIFIED]", value=str(len(unverified_members)), inline=True)
@@ -480,6 +488,43 @@ class VerifyCog(commands.Cog):
                     return int(raw)
         return None
 
+    def _claimed_staff_id(self, embed: discord.Embed) -> Optional[int]:
+        raw = self._embed_field_value(embed, "[CLAIMED BY]") or ""
+        cleaned = str(raw).replace("<@", "").replace("!", "").replace(">", "").strip()
+        if not cleaned or cleaned.casefold() == "unclaimed":
+            return None
+        if cleaned.isdigit():
+            return int(cleaned)
+        return None
+
+    async def _claim_or_validate_staff_intake(
+        self,
+        interaction: discord.Interaction,
+        actor: discord.Member,
+        embed: discord.Embed,
+    ) -> bool:
+        claimed_id = self._claimed_staff_id(embed)
+        if claimed_id and claimed_id != actor.id:
+            await self._send_interaction_embed(
+                interaction,
+                embeds.permission_denied_embed("First staff responder on this intake"),
+            )
+            return False
+        if claimed_id == actor.id or not interaction.message:
+            return True
+
+        updated = discord.Embed.from_dict(embed.to_dict())
+        replaced = False
+        for index, field in enumerate(updated.fields):
+            if field.name == "[CLAIMED BY]":
+                updated.set_field_at(index, name="[CLAIMED BY]", value=actor.mention, inline=True)
+                replaced = True
+                break
+        if not replaced:
+            updated.add_field(name="[CLAIMED BY]", value=actor.mention, inline=True)
+        await interaction.message.edit(embed=updated)
+        return True
+
     def _normalize_highrise_username(self, raw_value: str) -> Optional[str]:
         value = (raw_value or "").strip()
         if value.startswith("@"):
@@ -530,6 +575,33 @@ class VerifyCog(commands.Cog):
 
     def _build_verify_prompt_embed(self, member: discord.Member) -> discord.Embed:
         return embeds.verify_prompt_embed(member.mention, existing_username=self._existing_username(member))
+
+    def _build_update_username_prompt_embed(self, member: discord.Member) -> discord.Embed:
+        current_username = self._existing_username(member) or "NONE FILED"
+        embed = embeds.make_embed(
+            embeds.TITLE_VERIFY,
+            "Highrise name changed? File the replacement here and Victor will route it back through staff review.",
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(name="[TARGET]", value=member.mention, inline=True)
+        embed.add_field(name="[CURRENT]", value=current_username, inline=True)
+        embed.add_field(
+            name="[NOTE]",
+            value="Press `Open Intake` to submit the replacement username, or run `!updateusername NewName` directly in the lane.",
+            inline=False,
+        )
+        return embed
+
+    def _attach_channel_drop_note(self, embed: discord.Embed) -> discord.Embed:
+        embed.add_field(
+            name="[NOTE]",
+            value=(
+                "Victor filed that username from the ID lane for you accordingly. "
+                "Sorry for the inconvenience."
+            ),
+            inline=False,
+        )
+        return embed
 
     async def _queue_highrise_username_submission(
         self,
@@ -590,6 +662,132 @@ class VerifyCog(commands.Cog):
             previous_username=previous_username,
         )
         return embeds.verify_submission_received_embed(member.mention, highrise_username)
+
+    def _queue_status_counts(self) -> dict[str, int]:
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            rows = conn.execute(
+                "SELECT UPPER(COALESCE(status, 'UNKNOWN')) AS status, COUNT(*) AS count FROM verification_codes GROUP BY UPPER(COALESCE(status, 'UNKNOWN'))"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        counts = {str(row["status"]): int(row["count"]) for row in rows}
+        return {
+            "pending": counts.get("PENDING", 0),
+            "rejected": counts.get("REJECTED", 0),
+            "verified": counts.get("VERIFIED", 0),
+            "total": sum(counts.values()),
+        }
+
+    def _queue_rows(self, *, status: Optional[str] = None, recently_verified: bool = False, limit: int = 5) -> list[dict]:
+        conn = db.get_connection(self.cfg.db_path)
+        try:
+            if recently_verified:
+                rows = conn.execute(
+                    """
+                    SELECT
+                      u.discord_id AS discord_id,
+                      COALESCE(vc.highrise_username, u.highrise_username, 'UNKNOWN') AS highrise_username,
+                      COALESCE(vc.verified_at, vc.updated_at, vc.created_at) AS event_at
+                    FROM verification_codes vc
+                    INNER JOIN users u ON u.id = vc.user_id
+                    WHERE UPPER(COALESCE(vc.status, '')) = 'VERIFIED'
+                    ORDER BY COALESCE(vc.verified_at, vc.updated_at, vc.created_at) DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT
+                      u.discord_id AS discord_id,
+                      COALESCE(vc.highrise_username, u.highrise_username, 'UNKNOWN') AS highrise_username,
+                      COALESCE(vc.updated_at, vc.created_at) AS event_at
+                    FROM verification_codes vc
+                    INNER JOIN users u ON u.id = vc.user_id
+                    WHERE UPPER(COALESCE(vc.status, '')) = ?
+                    ORDER BY COALESCE(vc.updated_at, vc.created_at) DESC
+                    LIMIT ?
+                    """,
+                    ((status or "").upper(), limit),
+                ).fetchall()
+        finally:
+            conn.close()
+        return [dict(row) for row in rows]
+
+    def _queue_member_label(self, guild: Optional[discord.Guild], discord_id: str) -> str:
+        member = None
+        if guild:
+            try:
+                member = guild.get_member(int(discord_id))
+            except (TypeError, ValueError):
+                member = None
+        if member:
+            return f"{member.display_name} ({member.mention})"
+        if str(discord_id).strip():
+            return f"<@{discord_id}>"
+        return "Unknown member"
+
+    def _compact_timestamp(self, raw_value: Optional[str]) -> str:
+        value = str(raw_value or "").strip()
+        if not value:
+            return "unknown"
+        return value.replace("T", " ")[:16]
+
+    def _queue_lines(self, guild: Optional[discord.Guild], rows: list[dict], *, empty_text: str) -> str:
+        if not rows:
+            return empty_text
+
+        lines: list[str] = []
+        used = 0
+        for index, row in enumerate(rows):
+            label = self._queue_member_label(guild, str(row.get("discord_id") or ""))
+            username = str(row.get("highrise_username") or "UNKNOWN")
+            event_at = self._compact_timestamp(row.get("event_at"))
+            addition = f"{label} | {username} | {event_at}"
+            remaining = len(rows) - index - 1
+            suffix = f"\n(+{remaining} more)" if remaining > 0 else ""
+            if used + len(addition) + len(suffix) > 900:
+                if not lines:
+                    return addition[:900]
+                return "\n".join(lines) + suffix
+            lines.append(addition)
+            used += len(addition) + 1
+        return "\n".join(lines)
+
+    async def _build_verify_queue_embed(self, guild: Optional[discord.Guild]) -> discord.Embed:
+        counts = self._queue_status_counts()
+        pending_rows = self._queue_rows(status="PENDING")
+        rejected_rows = self._queue_rows(status="REJECTED")
+        recent_rows = self._queue_rows(recently_verified=True)
+
+        embed = embeds.make_embed(
+            embeds.TITLE_STATUS,
+            "Staff queue snapshot for the current verify lane.",
+            embeds.COLOR_NEUTRAL,
+        )
+        embed.add_field(name="[PENDING]", value=str(counts["pending"]), inline=True)
+        embed.add_field(name="[REJECTED]", value=str(counts["rejected"]), inline=True)
+        embed.add_field(name="[VERIFIED]", value=str(counts["verified"]), inline=True)
+        embed.add_field(name="[TOTAL FILES]", value=str(counts["total"]), inline=False)
+        embed.add_field(
+            name="[PENDING FILES]",
+            value=self._queue_lines(guild, pending_rows, empty_text="Queue is clear."),
+            inline=False,
+        )
+        embed.add_field(
+            name="[RECENT REJECTS]",
+            value=self._queue_lines(guild, rejected_rows, empty_text="None on file."),
+            inline=False,
+        )
+        embed.add_field(
+            name="[RECENT APPROVALS]",
+            value=self._queue_lines(guild, recent_rows, empty_text="None on file."),
+            inline=False,
+        )
+        return embed
 
     async def _approve_highrise_username(
         self,
@@ -737,6 +935,12 @@ class VerifyCog(commands.Cog):
         message = await ctx.send(embed=embed, view=self._build_verify_view())
         self._track_prompt_message(member, message)
 
+    async def _send_update_username_prompt_to_context(self, ctx: commands.Context, member: discord.Member) -> None:
+        await self._cleanup_previous_prompt(member)
+        embed = self._build_update_username_prompt_embed(member)
+        message = await ctx.send(embed=embed, view=self._build_verify_view())
+        self._track_prompt_message(member, message)
+
     async def handle_plain_text_verify_trigger(self, message: discord.Message) -> bool:
         if not message.guild or not isinstance(message.author, discord.Member):
             return False
@@ -769,6 +973,55 @@ class VerifyCog(commands.Cog):
             delete_after=60,
         )
         self._track_prompt_message(message.author, reply)
+        return True
+
+    async def handle_verify_channel_username_drop(self, message: discord.Message) -> bool:
+        if not message.guild or not isinstance(message.author, discord.Member):
+            return False
+        if not self._is_verify_channel(getattr(message.channel, "id", None)):
+            return False
+
+        raw_username = (message.content or "").strip()
+        if not raw_username or raw_username.startswith(self.cfg.prefix) or raw_username.startswith("/"):
+            return False
+
+        author_blacklist = self._blacklist_record(str(message.author.id))
+        if author_blacklist and not self._is_admin(message.author):
+            await message.reply(
+                embed=embeds.blacklisted_embed(author_blacklist.get("reason")),
+                mention_author=False,
+                delete_after=20,
+            )
+            return True
+
+        username = self._normalize_highrise_username(raw_username)
+        if not username:
+            return False
+
+        try:
+            embed = await self._queue_highrise_username_submission(
+                str(message.author.id),
+                message.author,
+                username,
+                source="verify_channel_drop",
+            )
+        except Exception as exc:
+            self.logger.exception("Verify channel username drop failed", exc_info=exc)
+            await message.reply(
+                embed=embeds.system_error_embed(),
+                mention_author=False,
+                delete_after=20,
+            )
+            return True
+
+        await self._cleanup_previous_prompt(message.author)
+        await self._delete_message_safely(message)
+        self._forget_prompt_message(message.author)
+        await message.channel.send(
+            content=message.author.mention,
+            embed=self._attach_channel_drop_note(embed),
+            delete_after=45,
+        )
         return True
 
     async def _send_verify_prompt_to_interaction(
@@ -894,6 +1147,34 @@ class VerifyCog(commands.Cog):
             return
         await self._send_verify_prompt_to_interaction(interaction, actor, ephemeral=True)
 
+    async def handle_menu_update_username_button(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
+            return
+
+        author_blacklist = self._blacklist_record(str(actor.id))
+        if author_blacklist and not self._is_admin(actor):
+            await self._send_interaction_embed(interaction, embeds.blacklisted_embed(author_blacklist.get("reason")))
+            return
+
+        try:
+            await interaction.response.send_modal(
+                VerifyIntakeModal(
+                    self,
+                    actor.id,
+                    existing_username=self._existing_username(actor),
+                )
+            )
+        except Exception as exc:
+            await self.handle_verify_component_error(interaction, exc, stage="update_username_button:send_modal")
+
     async def handle_menu_status_button(self, interaction: discord.Interaction) -> None:
         if not interaction.guild:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
@@ -912,6 +1193,19 @@ class VerifyCog(commands.Cog):
             await self._send_interaction_embed(interaction, embeds.verify_missing_record_embed(actor.mention), ephemeral=True)
             return
         await self._send_interaction_embed(interaction, self._build_status_embed(actor, payload), ephemeral=True)
+
+    async def handle_verify_queue_button(self, interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member) or not self._can_manage_verification(actor):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Verifier"))
+            return
+
+        embed = await self._build_verify_queue_embed(interaction.guild)
+        await self._send_interaction_embed(interaction, embed, ephemeral=True)
 
     async def _send_status_interaction(
         self,
@@ -1048,6 +1342,8 @@ class VerifyCog(commands.Cog):
         if not member_id or not username:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
             return
+        if not await self._claim_or_validate_staff_intake(interaction, actor, embed):
+            return
 
         await self._defer_interaction(interaction, ephemeral=True)
 
@@ -1085,6 +1381,8 @@ class VerifyCog(commands.Cog):
         username = self._normalize_highrise_username(self._embed_field_value(embed, "[HIGHRISE]") or "")
         if not member_id or not username:
             await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+        if not await self._claim_or_validate_staff_intake(interaction, actor, embed):
             return
 
         await self._defer_interaction(interaction, ephemeral=True)
@@ -1203,6 +1501,56 @@ class VerifyCog(commands.Cog):
 
         await self._send_status_interaction(interaction, target, ephemeral=True)
 
+    @app_commands.command(name="updateusername", description="File a Highrise username change request.")
+    @app_commands.describe(highrise_username="Optional replacement username to submit immediately")
+    @app_commands.guild_only()
+    async def update_username_slash(
+        self,
+        interaction: discord.Interaction,
+        highrise_username: Optional[str] = None,
+    ) -> None:
+        if not interaction.guild:
+            await self._send_interaction_embed(interaction, embeds.system_error_embed())
+            return
+        if await self._redirect_to_verify_channel_for_interaction(interaction):
+            return
+
+        actor = interaction.user
+        if not isinstance(actor, discord.Member):
+            await self._send_interaction_embed(interaction, embeds.permission_denied_embed("Server member"))
+            return
+
+        author_blacklist = self._blacklist_record(str(actor.id))
+        if author_blacklist and not self._is_admin(actor):
+            await self._send_interaction_embed(interaction, embeds.blacklisted_embed(author_blacklist.get("reason")))
+            return
+
+        if not highrise_username:
+            await self.handle_menu_update_username_button(interaction)
+            return
+
+        username = self._normalize_highrise_username(highrise_username)
+        if not username:
+            await self._send_interaction_embed(
+                interaction,
+                embeds.invalid_usage_embed("/updateusername highrise_username"),
+            )
+            return
+
+        await self._defer_interaction(interaction, ephemeral=True)
+        embed = await self._queue_highrise_username_submission(
+            str(actor.id),
+            actor,
+            username,
+            source="update_username_slash",
+        )
+        await self._send_interaction_embed(interaction, embed, ephemeral=True)
+
+    @app_commands.command(name="verifyqueue", description="Staff snapshot of pending and recent verification activity.")
+    @app_commands.guild_only()
+    async def verify_queue_slash(self, interaction: discord.Interaction) -> None:
+        await self.handle_verify_queue_button(interaction)
+
     @app_commands.command(name="manualverify", description="Staff override to log a Highrise username.")
     @app_commands.describe(member="Member to verify", highrise_username="Highrise username to file")
     @app_commands.guild_only()
@@ -1250,6 +1598,33 @@ class VerifyCog(commands.Cog):
             await ctx.send(embed=embeds.blacklisted_embed(author_blacklist.get("reason")))
             return
         await self._send_verify_prompt_to_context(ctx, ctx.author)
+
+    @commands.command(name="updateusername", aliases=["changeusername"])
+    async def update_username(self, ctx: commands.Context, *, highrise_username: Optional[str] = None) -> None:
+        if await self._redirect_to_verify_channel_for_context(ctx):
+            return
+
+        author_blacklist = self._blacklist_record(str(ctx.author.id))
+        if author_blacklist and not self._is_admin(ctx.author):
+            await ctx.send(embed=embeds.blacklisted_embed(author_blacklist.get("reason")))
+            return
+
+        if not highrise_username:
+            await self._send_update_username_prompt_to_context(ctx, ctx.author)
+            return
+
+        username = self._normalize_highrise_username(highrise_username)
+        if not username:
+            await ctx.send(embed=embeds.invalid_usage_embed("!updateusername NewName"))
+            return
+
+        embed = await self._queue_highrise_username_submission(
+            str(ctx.author.id),
+            ctx.author,
+            username,
+            source="update_username_command",
+        )
+        await ctx.send(embed=embed)
 
     @commands.command(name="manualverify")
     async def manual_verify(
@@ -1310,6 +1685,18 @@ class VerifyCog(commands.Cog):
             await self._send_staff_status_context(ctx, embed)
             return
         await ctx.send(embed=embed)
+
+    @commands.command(name="verifyqueue")
+    async def verify_queue(self, ctx: commands.Context) -> None:
+        if not ctx.guild:
+            await ctx.send(embed=embeds.system_error_embed())
+            return
+        if not self._can_manage_verification(ctx.author):
+            await ctx.send(embed=embeds.permission_denied_embed("Verifier"))
+            return
+
+        embed = await self._build_verify_queue_embed(ctx.guild)
+        await self._send_staff_status_context(ctx, embed)
 
 async def setup(bot: commands.Bot) -> None:
     cfg = bot.victor_config

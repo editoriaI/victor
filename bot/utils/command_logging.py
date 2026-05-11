@@ -60,7 +60,31 @@ QUIET_SUCCESS_COMMANDS = {
     "status",
 }
 
-PATCH_NOTE_ID = "2026-03-26-verify-intake-refresh"
+PATCH_NOTE_LOG = [
+    {
+        "id": "2026-03-26-verify-intake-refresh",
+        "title": "verify intake refresh",
+        "summary": "Victor moved verification into a cleaner intake-first flow with staff signoff.",
+        "changes": [
+            "`verify` now opens a member intake prompt",
+            "members submit their HR username directly",
+            "staff approves or rejects before anything gets filed",
+        ],
+    },
+    {
+        "id": "2026-04-18-market-routing-and-gold-desk",
+        "title": "market routing and gold desk",
+        "summary": "Victor now routes market and gold traffic into cleaner lanes with less clutter.",
+        "changes": [
+            "member menu and help desk were cleaned up for easier navigation",
+            "gold posts route to market lanes and trusted overflow automatically",
+            "trusted gold traffic mirrors into trusted market instead of reposting blindly",
+            "gold posts now use cooldowns, expiry, and one trusted bump pass",
+            "beta market-match checks now flag possible overlaps on live posts",
+            "pinging Victor now returns a patch-note style update instead of the old intro speech",
+        ],
+    },
+]
 
 
 def _truncate(value: Optional[str], limit: int = 1024) -> Optional[str]:
@@ -93,40 +117,71 @@ def _write_patch_note_state(state: dict) -> None:
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
 
 
-def _build_patch_note_embed() -> discord.Embed:
+def _patch_note_ids() -> list[str]:
+    return [entry["id"] for entry in PATCH_NOTE_LOG]
+
+
+def _pending_patch_entries(state: dict) -> list[dict]:
+    published_ids = set(state.get("published_patch_note_ids", []))
+    last_patch_note_id = state.get("last_patch_note_id")
+    if last_patch_note_id and not published_ids:
+        published_ids.add(last_patch_note_id)
+    return [entry for entry in PATCH_NOTE_LOG if entry["id"] not in published_ids]
+
+
+def _build_patch_note_embed(entries: Optional[list[dict]] = None) -> discord.Embed:
+    pending_entries = entries or PATCH_NOTE_LOG[-1:]
+    latest = pending_entries[-1]
     embed = discord.Embed(
-        title="patch notes // verify intake refresh",
-        description="[ PATCH LOG ]\n\nVictor has deployed a quieter, tighter verify flow.\n\nNo more bio ritual.\nJust usernames, intake, and staff judgment.\n\nCleaner system. Fewer excuses.",
+        title=f"patch notes // {latest['title']}",
+        description=(
+            "[ PATCH LOG ]\n\n"
+            "let's get this done quickly and quietly so the next feature load can start.\n\n"
+            f"{latest['summary']}"
+        ),
         color=STATUS_COLORS["system"],
         timestamp=datetime.now(timezone.utc),
     )
     embed.set_author(name="💿 @victor.intern dropped release notes")
     embed.set_footer(text="v i c t o r . s o c i a l // patch desk")
-    embed.add_field(
-        name="What Changed",
-        value=(
-            "- `verify` now opens a member intake prompt\n"
-            "- members submit their HR username directly\n"
-            "- staff approves or rejects before anything gets filed"
-        ),
-        inline=False,
-    )
-    embed.add_field(
-        name="Menu Lane",
-        value="the `menu` verify button now launches the intake flow directly instead of just showing help text.",
-        inline=False,
-    )
-    embed.add_field(
-        name="Status + Staff",
-        value="`status` shows pending, returned, or logged. staff still has manual verify for corrections or overrides.",
-        inline=False,
-    )
+    for index, entry in enumerate(pending_entries, start=1):
+        embed.add_field(
+            name=f"Update {index} // {entry['title']}",
+            value="\n".join(f"- {line}" for line in entry["changes"][:6]),
+            inline=False,
+        )
     embed.add_field(
         name="Live Commands",
-        value="`menu`, `help`, `verify`, `manualverify`, `status`, and `sync` are the active lanes right now.",
+        value="`menu`, `help`, `verify`, `status`, `blackmarket`, `request`, `gold`, and `sync` are the live lanes right now.",
         inline=False,
     )
     return embed
+
+
+def has_pending_patch_notes() -> bool:
+    state = _load_patch_note_state()
+    return bool(_pending_patch_entries(state))
+
+
+def build_pending_patch_note_embed() -> Optional[discord.Embed]:
+    state = _load_patch_note_state()
+    pending_entries = _pending_patch_entries(state)
+    if not pending_entries:
+        return None
+    return _build_patch_note_embed(pending_entries)
+
+
+def mark_patch_notes_published() -> None:
+    state = _load_patch_note_state()
+    published_ids = set(state.get("published_patch_note_ids", []))
+    published_ids.update(_patch_note_ids())
+    _write_patch_note_state(
+        {
+            "last_patch_note_id": PATCH_NOTE_LOG[-1]["id"],
+            "published_patch_note_ids": sorted(published_ids),
+            "posted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+    )
 
 
 def _format_location(location: Optional[str]) -> Optional[str]:
@@ -374,15 +429,10 @@ async def log_system_event(
 async def maybe_publish_patch_note(bot: commands.Bot, cfg: Config) -> None:
     if not cfg.log_channel_id:
         return
-    state = _load_patch_note_state()
-    if state.get("last_patch_note_id") == PATCH_NOTE_ID:
+    embed = build_pending_patch_note_embed()
+    if embed is None:
         return
-    sent = await send_log_channel(bot, cfg, embed=_build_patch_note_embed())
+    sent = await send_log_channel(bot, cfg, embed=embed)
     if not sent:
         return
-    _write_patch_note_state(
-        {
-            "last_patch_note_id": PATCH_NOTE_ID,
-            "posted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        }
-    )
+    mark_patch_notes_published()
