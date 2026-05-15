@@ -44,7 +44,7 @@ def build_menu_embed(cfg: Config) -> discord.Embed:
     )
     embed.add_field(
         name="[GOLD DESK]",
-        value="E-bank access stays tight: `!balance` checks iVictor's Highrise wallet snapshot and `!transfer` queues a gold transfer.",
+        value="E-bank access stays tight: `!balance` checks cIerk's Highrise wallet snapshot and `!transfer` queues a gold transfer.",
         inline=False,
     )
     embed.add_field(
@@ -220,7 +220,7 @@ def build_help_topic_embed(feature: Optional[str]) -> discord.Embed:
         embed.add_field(name="[TRANSFER]", value="!transfer <highrise_user_id> <amount> [note] | /transfer", inline=False)
         embed.add_field(
             name="[SOURCE]",
-            value="iVictor reads the Highrise bot wallet with `get_wallet()` and sends gold with `tip_user()`.",
+            value="cIerk reads the Highrise bot wallet with `get_wallet()` and sends gold with `tip_user()`.",
             inline=False,
         )
         return embed

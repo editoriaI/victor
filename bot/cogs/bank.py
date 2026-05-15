@@ -53,7 +53,7 @@ class BankCog(commands.Cog):
     def _balance_embed(self, payload: dict) -> discord.Embed:
         embed = embeds.make_embed(
             f"{embeds.TITLE_ADMIN} // EBANK",
-            "[ TREASURY BALANCE ]\n\nVictor checked iVictor's last Highrise wallet snapshot.",
+            "[ TREASURY BALANCE ]\n\nVictor checked cIerk's last Highrise wallet snapshot.",
             embeds.COLOR_NEUTRAL,
         )
         embed.add_field(name="[GOLD]", value=f"{int(payload.get('gold') or 0):,}", inline=True)
@@ -64,7 +64,7 @@ class BankCog(commands.Cog):
     def _transfer_embed(self, payload: dict) -> discord.Embed:
         embed = embeds.make_embed(
             f"{embeds.TITLE_ADMIN} // EBANK",
-            "[ TRANSFER QUEUED ]\n\niVictor will execute this through the Highrise bot wallet.",
+            "[ TRANSFER QUEUED ]\n\ncIerk will execute this through the Highrise bot wallet.",
             embeds.COLOR_OK,
         )
         embed.add_field(name="[ID]", value=str(payload.get("id") or "queued"), inline=True)
@@ -87,7 +87,7 @@ class BankCog(commands.Cog):
         try:
             payload = await self._get_balance()
         except Exception as exc:
-            await ctx.send(embed=embeds.bank_transfer_error_embed(f"iVictor bank API did not answer: {exc}"))
+            await ctx.send(embed=embeds.bank_transfer_error_embed(f"cIerk bank API did not answer: {exc}"))
             return
         await ctx.send(embed=self._balance_embed(payload))
 
@@ -115,17 +115,17 @@ class BankCog(commands.Cog):
             return
         await ctx.send(embed=self._transfer_embed(payload))
 
-    @app_commands.command(name="balance", description="Check iVictor's Highrise gold wallet snapshot.")
+    @app_commands.command(name="balance", description="Check cIerk's Highrise gold wallet snapshot.")
     @app_commands.guild_only()
     async def balance_slash(self, interaction: discord.Interaction) -> None:
         try:
             payload = await self._get_balance()
         except Exception as exc:
-            await self._send_error(interaction, f"iVictor bank API did not answer: {exc}")
+            await self._send_error(interaction, f"cIerk bank API did not answer: {exc}")
             return
         await interaction.response.send_message(embed=self._balance_embed(payload), ephemeral=True)
 
-    @app_commands.command(name="transfer", description="Queue a Highrise gold transfer through iVictor.")
+    @app_commands.command(name="transfer", description="Queue a Highrise gold transfer through cIerk.")
     @app_commands.describe(
         to_highrise_user_id="Highrise user ID to receive the gold",
         amount="Gold amount to transfer",
